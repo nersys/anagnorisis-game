@@ -679,9 +679,12 @@ function generateSceneImage(room) {
   const img = document.getElementById('scene-image');
   const loading = document.getElementById('scene-loading');
   const nameEl = document.getElementById('scene-room-name');
+  const wrapper = document.getElementById('scene-wrapper');
 
   nameEl.textContent = room.name || '';
-  img.classList.add('loading');
+  // Show gradient immediately — image overlays when ready
+  wrapper.style.background = roomGradient(room.room_type);
+  img.style.display = 'none';
   loading.style.display = 'flex';
 
   const roomDesc = room.description || room.name || 'dungeon room';
@@ -712,11 +715,16 @@ function generateSceneImage(room) {
   const timeout = setTimeout(showFallback, 20000);
   tempImg.onload = () => {
     clearTimeout(timeout);
-    img.style.display = '';
-    document.getElementById('scene-wrapper').style.background = '';
     img.src = url;
+    img.style.display = '';
+    img.style.opacity = '0';
     img.classList.remove('loading');
     loading.style.display = 'none';
+    // Fade in over gradient
+    requestAnimationFrame(() => {
+      img.style.transition = 'opacity 0.8s ease';
+      img.style.opacity = '1';
+    });
   };
   tempImg.onerror = () => {
     clearTimeout(timeout);
@@ -727,11 +735,11 @@ function generateSceneImage(room) {
 
 function roomGradient(type) {
   const gradients = {
-    start:    'linear-gradient(135deg, #0d1f0d, #1a2e1a)',
-    corridor: 'linear-gradient(135deg, #0a0a1a, #141428)',
-    chamber:  'linear-gradient(135deg, #0f0a1e, #1e1230)',
-    treasure: 'linear-gradient(135deg, #1f1800, #2a2400)',
-    boss:     'linear-gradient(135deg, #1a0020, #2a0040)',
+    start:    'radial-gradient(ellipse at 50% 80%, #1a3a1a 0%, #0a1a0a 60%, #050a05 100%)',
+    corridor: 'radial-gradient(ellipse at 30% 70%, #1a1a3a 0%, #0d0d20 60%, #080810 100%)',
+    chamber:  'radial-gradient(ellipse at 50% 60%, #221535 0%, #130d22 60%, #080810 100%)',
+    treasure: 'radial-gradient(ellipse at 50% 80%, #3a2e00 0%, #1f1800 50%, #0a0800 100%)',
+    boss:     'radial-gradient(ellipse at 50% 40%, #3a0a4a 0%, #1a0028 50%, #080010 100%)',
   };
   return gradients[type] || gradients.chamber;
 }
