@@ -1542,4 +1542,9 @@ function boot() {
   showScreen('login');
 }
 
-document.addEventListener('DOMContentLoaded', boot);
+// Script is at bottom of <body> — DOM already parsed, call directly
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', boot);
+} else {
+  boot();
+}
