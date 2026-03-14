@@ -194,7 +194,11 @@
               </div>
             </div>
             <div class="scene-room-name" id="scene-room-name"></div>
-            <button class="btn btn-ghost btn-sm scene-regen-btn" id="btn-regen-image" title="Regenerate scene art">🎨</button>
+            <div class="scene-action-btns">
+              <button class="btn btn-ghost btn-sm scene-regen-btn" id="btn-regen-image" title="Regenerate scene art">🎨</button>
+              <button class="btn btn-ghost btn-sm scene-regen-btn" id="btn-location-history" title="Location history">📜</button>
+              <button class="btn btn-ghost btn-sm scene-regen-btn" id="btn-find-taverns" title="Find nearby taverns">🍺</button>
+            </div>
           </div>
 
           <!-- Narrative Log -->
@@ -283,11 +287,87 @@
         </div>
       </div>
 
+      <!-- Location History Modal -->
+      <div class="modal-overlay hidden" id="history-modal">
+        <div class="modal card history-modal-card">
+          <div class="modal-header">
+            <div>
+              <h2 id="history-modal-title">📜 Location Lore</h2>
+              <p id="history-modal-subtitle" style="font-size:10px;color:var(--text-muted);margin-top:2px;font-family:var(--font-mono)"></p>
+            </div>
+            <button class="modal-close" id="btn-close-history">✕</button>
+          </div>
+          <div class="modal-body" id="history-modal-body">
+            <div class="status-line"><span class="spinner"></span><span>Consulting the ancient scrolls...</span></div>
+          </div>
+          <div id="history-modal-thumb" class="history-thumb"></div>
+          <div class="modal-footer">
+            <a id="history-wiki-link" href="#" target="_blank" rel="noopener" class="btn-link hidden">View on Wikipedia ↗</a>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tavern Modal -->
+      <div class="modal-overlay hidden" id="tavern-modal">
+        <div class="modal card tavern-modal-card">
+          <div class="modal-header">
+            <div>
+              <h2>🍺 Nearby Taverns</h2>
+              <p id="tavern-location-label" style="font-size:10px;color:var(--text-muted);margin-top:2px;font-family:var(--font-mono)"></p>
+            </div>
+            <button class="modal-close" id="btn-close-tavern">✕</button>
+          </div>
+
+          <!-- Services menu -->
+          <div class="tavern-services" id="tavern-services">
+            <div class="tavern-service-label">📋 Order from any tavern:</div>
+            <div class="service-grid">
+              <div class="service-card" data-service="ale">
+                <div class="svc-emoji">🍺</div>
+                <div class="svc-name">Ale &amp; Bread</div>
+                <div class="svc-effect">+20 HP · +5 MP</div>
+                <div class="svc-cost">10 💰</div>
+              </div>
+              <div class="service-card" data-service="meal">
+                <div class="svc-emoji">🍖</div>
+                <div class="svc-name">Hearty Meal</div>
+                <div class="svc-effect">+45 HP · +15 MP</div>
+                <div class="svc-cost">25 💰</div>
+              </div>
+              <div class="service-card" data-service="elixir">
+                <div class="svc-emoji">🔮</div>
+                <div class="svc-name">Mage's Elixir</div>
+                <div class="svc-effect">+10 HP · +45 MP</div>
+                <div class="svc-cost">30 💰</div>
+              </div>
+              <div class="service-card" data-service="rest">
+                <div class="svc-emoji">🛏</div>
+                <div class="svc-name">Full Night's Rest</div>
+                <div class="svc-effect">Full HP &amp; MP</div>
+                <div class="svc-cost">60 💰</div>
+              </div>
+            </div>
+          </div>
+
+          <hr class="divider" />
+
+          <!-- Tavern list -->
+          <div class="tavern-list-label">🗺 Real taverns near your location:</div>
+          <div class="modal-body">
+            <div id="tavern-list" class="tavern-list">
+              <div class="status-line"><span class="spinner"></span><span>Scouting nearby establishments...</span></div>
+            </div>
+          </div>
+
+          <div id="tavern-action-status" class="tavern-action-status hidden"></div>
+        </div>
+      </div>
+
     </div><!-- end screen-game -->
 
   </div><!-- end #app -->
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="/static/js/bundle.js?v=6"></script>
+  <script src="/static/js/bundle.js?v=7"></script>
 </body>
 </html>

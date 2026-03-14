@@ -829,6 +829,31 @@ function initGame() {
   const companionInput = document.getElementById('companion-input');
   document.getElementById('btn-companion-send').addEventListener('click', sendCompanionMessage);
   companionInput.addEventListener('keydown', e => { if (e.key === 'Enter') sendCompanionMessage(); });
+
+  // ── Location history ──
+  document.getElementById('btn-location-history').addEventListener('click', showLocationHistory);
+  document.getElementById('btn-close-history').addEventListener('click', () => {
+    document.getElementById('history-modal').classList.add('hidden');
+  });
+
+  // ── Tavern finder ──
+  document.getElementById('btn-find-taverns').addEventListener('click', showTaverns);
+  document.getElementById('btn-close-tavern').addEventListener('click', () => {
+    document.getElementById('tavern-modal').classList.add('hidden');
+  });
+
+  // Service card selection
+  let selectedService = 'ale';
+  document.querySelectorAll('.service-card').forEach(card => {
+    card.addEventListener('click', () => {
+      document.querySelectorAll('.service-card').forEach(c => c.classList.remove('selected'));
+      card.classList.add('selected');
+      selectedService = card.dataset.service;
+      window._selectedTavernService = selectedService;
+    });
+  });
+  document.querySelector('.service-card[data-service="ale"]').classList.add('selected');
+  window._selectedTavernService = 'ale';
 }
 
 function renderGameUI() {
@@ -874,7 +899,7 @@ function renderStats() {
       <div class="bar-track" style="height:4px"><div class="bar-fill bar-xp" style="width:${xpPct}%"></div></div>
     </div>
     <div class="stats-grid">
-      <div class="stat-item"><div class="stat-label">Gold</div><div class="stat-value stat-gold">💰 ${(state.dungeon&&state.dungeon.gold_collected)||s.gold||0}</div></div>
+      <div class="stat-item"><div class="stat-label">Gold</div><div class="stat-value stat-gold">💰 ${s.gold||0}</div></div>
       <div class="stat-item"><div class="stat-label">STR</div><div class="stat-value stat-str">${s.strength||0}</div></div>
       <div class="stat-item"><div class="stat-label">INT</div><div class="stat-value stat-int">${s.intelligence||0}</div></div>
       <div class="stat-item"><div class="stat-label">DEX</div><div class="stat-value stat-dex">${s.dexterity||0}</div></div>
@@ -1228,6 +1253,121 @@ function generateCustomArt() {
   promptEl.value = '';
 }
 
+// ═══════════════════════════════════════════════════════
+// LOCATION HISTORY
+// ═══════════════════════════════════════════════════════
+
+async function showLocationHistory() {
+  const room = currentRoomData;
+  const locationName = (laMap && laMap.getRoomName(room && room.id)) || (room && room.name) || 'This Location';
+  const lat = (laMap && room && laMap.roomLocations[room.id]) ? laMap.roomLocations[room.id][0] : 34.0522;
+  const lng = (laMap && room && laMap.roomLocations[room.id]) ? laMap.roomLocations[room.id][1] : -118.2437;
+
+  // Open modal, show spinner
+  const modal = document.getElementById('history-modal');
+  const body  = document.getElementById('history-modal-body');
+  const title = document.getElementById('history-modal-title');
+  const sub   = document.getElementById('history-modal-subtitle');
+  const thumb = document.getElementById('history-modal-thumb');
+  const link  = document.getElementById('history-wiki-link');
+
+  title.textContent = `📜 ${locationName}`;
+  sub.textContent = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+  body.innerHTML = '<div class="status-line"><span class="spinner"></span><span>Consulting the ancient scrolls...</span></div>';
+  thumb.innerHTML = '';
+  link.classList.add('hidden');
+  modal.classList.remove('hidden');
+
+  try {
+    const res = await fetch(`/location-history?name=${encodeURIComponent(locationName)}&lat=${lat}&lng=${lng}`);
+    const data = await res.json();
+
+    const sourceBadge = data.source === 'wikipedia'
+      ? '<span class="history-source-badge">Wikipedia</span>'
+      : '<span class="history-source-badge">Game Lore</span>';
+
+    body.innerHTML = sourceBadge + '<p style="margin-top:8px">' + (data.extract || 'No records found.') + '</p>';
+
+    if (data.thumbnail) {
+      thumb.innerHTML = `<img src="${data.thumbnail}" alt="${data.title}" />`;
+    }
+    if (data.url) {
+      link.href = data.url;
+      link.classList.remove('hidden');
+    }
+  } catch (e) {
+    body.innerHTML = '<p style="color:var(--red)">Failed to load location history.</p>';
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// TAVERNS
+// ═══════════════════════════════════════════════════════
+
+async function showTaverns() {
+  const room = currentRoomData;
+  const locationName = (laMap && laMap.getRoomName(room && room.id)) || (room && room.name) || 'your location';
+  const lat = (laMap && room && laMap.roomLocations[room.id]) ? laMap.roomLocations[room.id][0] : 34.0522;
+  const lng = (laMap && room && laMap.roomLocations[room.id]) ? laMap.roomLocations[room.id][1] : -118.2437;
+
+  const modal   = document.getElementById('tavern-modal');
+  const list    = document.getElementById('tavern-list');
+  const label   = document.getElementById('tavern-location-label');
+  const status  = document.getElementById('tavern-action-status');
+
+  label.textContent = `Near ${locationName}`;
+  list.innerHTML = '<div class="status-line"><span class="spinner"></span><span>Scouting establishments...</span></div>';
+  status.classList.add('hidden');
+  modal.classList.remove('hidden');
+
+  try {
+    const res = await fetch(`/taverns?lat=${lat}&lng=${lng}`);
+    const data = await res.json();
+    const taverns = data.taverns || [];
+
+    if (!taverns.length) {
+      list.innerHTML = '<div class="empty-state">No taverns found nearby. The wilderness is barren.</div>';
+      return;
+    }
+
+    list.innerHTML = taverns.map((t, i) => `
+      <div class="tavern-item">
+        <span class="tavern-emoji">${t.emoji}</span>
+        <div class="tavern-info">
+          <div class="tavern-name">${t.name}</div>
+          <div class="tavern-type">${t.type}${t.cuisine ? ' · ' + t.cuisine : ''}</div>
+          ${t.opening_hours ? `<div class="tavern-cuisine">⏰ ${t.opening_hours}</div>` : ''}
+        </div>
+        <button class="tavern-visit-btn" onclick="visitTavern('${t.name.replace(/'/g,"\\'")}')">Visit</button>
+      </div>
+    `).join('');
+  } catch (e) {
+    list.innerHTML = '<p style="color:var(--red);padding:12px">Failed to find nearby taverns.</p>';
+  }
+}
+
+function visitTavern(tavernName) {
+  const service = window._selectedTavernService || 'ale';
+  const status  = document.getElementById('tavern-action-status');
+  const p = state.player;
+  const COSTS = { ale: 10, meal: 25, elixir: 30, rest: 60 };
+  const gold = p ? (p.stats ? p.stats.gold : 0) : 0;
+  const cost = COSTS[service] || 10;
+
+  if (gold < cost) {
+    status.className = 'tavern-action-status error';
+    status.textContent = `⚠️ Not enough gold! You have ${gold}g but need ${cost}g.`;
+    status.classList.remove('hidden');
+    return;
+  }
+
+  status.className = 'tavern-action-status';
+  status.innerHTML = '<span class="spinner"></span> Ordering...';
+  status.classList.remove('hidden');
+
+  ws.send('TAVERN_VISIT', { tavern_name: tavernName, service });
+}
+
 async function sendCompanionMessage() {
   const input = document.getElementById('companion-input');
   const msg = input.value.trim();
@@ -1456,6 +1596,20 @@ function setupHandlers() {
       addLog(`🧪 ${payload.message}`, 'loot');
       renderStats();
       renderActionBar();
+    }
+
+    // Tavern visit response
+    if (payload.tavern_visited) {
+      applyStateUpdate(payload); // updates player stats (hp, mp, gold)
+      addLog(`🍺 ${payload.message}`, 'loot');
+      renderStats();
+      // Update tavern modal status
+      const status = document.getElementById('tavern-action-status');
+      if (status) {
+        status.className = 'tavern-action-status';
+        status.textContent = `✅ ${payload.message}`;
+        status.classList.remove('hidden');
+      }
     }
   });
 

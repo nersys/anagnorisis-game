@@ -233,6 +233,131 @@ async def generate_scene_art(
         return Response(content=fallback_svg, media_type="image/svg+xml")
 
 
+@app.get("/location-history")
+async def location_history(
+    name: str = Query(..., description="Location name to look up"),
+    lat: float = Query(0.0),
+    lng: float = Query(0.0),
+):
+    """
+    Return real-world history for a location.
+    Tries Wikipedia first, falls back to Claude generating atmospheric lore.
+    """
+    # ── Try Wikipedia ───────────────────────────────────────────────────────
+    wiki_data = None
+    try:
+        import urllib.parse
+        encoded = urllib.parse.quote(name.replace(" ", "_"))
+        wiki_url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{encoded}"
+        async with httpx.AsyncClient(timeout=6.0) as client:
+            r = await client.get(wiki_url, headers={"User-Agent": "Anagnorisis-Game/1.0"})
+            if r.status_code == 200:
+                data = r.json()
+                if data.get("extract") and data.get("type") != "disambiguation":
+                    wiki_data = {
+                        "title": data.get("title", name),
+                        "extract": data.get("extract", "")[:800],
+                        "thumbnail": (data.get("thumbnail") or {}).get("source"),
+                        "url": data.get("content_urls", {}).get("desktop", {}).get("page"),
+                        "source": "wikipedia",
+                    }
+    except Exception as e:
+        logger.warning(f"Wikipedia lookup failed for '{name}': {e}")
+
+    if wiki_data:
+        return wiki_data
+
+    # ── Fall back to Claude: generate atmospheric game-world lore ───────────
+    try:
+        ai_client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+        prompt = (
+            f"You are a lore-keeper in a dark fantasy RPG set in a real-world city. "
+            f"The player is at '{name}' (coordinates {lat:.4f}, {lng:.4f} in Los Angeles). "
+            f"Write 3-4 sentences of atmospheric historical lore about this real place, "
+            f"blending actual history with dark fantasy elements. "
+            f"Mention real historical facts if you know them, weaving in RPG flavor."
+        )
+        response = ai_client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=300,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        lore = response.content[0].text.strip()
+        return {"title": name, "extract": lore, "thumbnail": None, "url": None, "source": "lore"}
+    except Exception as e:
+        logger.error(f"Lore generation failed: {e}")
+        return {"title": name, "extract": f"The ancient records of {name} have been lost to time...", "thumbnail": None, "url": None, "source": "fallback"}
+
+
+@app.get("/taverns")
+async def find_taverns(
+    lat: float = Query(...),
+    lng: float = Query(...),
+    radius: int = Query(600, description="Search radius in metres"),
+):
+    """
+    Find real bars/pubs/restaurants near the given coordinates using OpenStreetMap Overpass API.
+    Returns them formatted as in-game taverns.
+    """
+    overpass_query = f"""
+[out:json][timeout:10];
+(
+  node[amenity~"^(bar|pub|restaurant|cafe)$"](around:{radius},{lat},{lng});
+);
+out 12;
+"""
+    taverns = []
+    try:
+        async with httpx.AsyncClient(timeout=12.0) as client:
+            r = await client.post(
+                "https://overpass-api.de/api/interpreter",
+                data={"data": overpass_query},
+                headers={"User-Agent": "Anagnorisis-Game/1.0"},
+            )
+            if r.status_code == 200:
+                elements = r.json().get("elements", [])
+                for el in elements:
+                    tags = el.get("tags", {})
+                    real_name = tags.get("name", "")
+                    if not real_name:
+                        continue
+                    amenity = tags.get("amenity", "bar")
+                    # Map real amenity to game tavern type
+                    if amenity in ("bar", "pub"):
+                        ttype, emoji = "tavern", "🍺"
+                    elif amenity == "cafe":
+                        ttype, emoji = "inn", "☕"
+                    else:
+                        ttype, emoji = "alehouse", "🍖"
+
+                    taverns.append({
+                        "name": real_name,
+                        "type": ttype,
+                        "emoji": emoji,
+                        "amenity": amenity,
+                        "lat": el.get("lat", lat),
+                        "lng": el.get("lon", lng),
+                        "cuisine": tags.get("cuisine", ""),
+                        "opening_hours": tags.get("opening_hours", ""),
+                    })
+    except Exception as e:
+        logger.warning(f"Overpass API failed: {e}")
+
+    # If too few results, pad with thematic placeholders
+    fallback_names = [
+        ("The Wandering Blade", "tavern", "🍺"),
+        ("The Dusty Flagon", "tavern", "🍺"),
+        ("Crossroads Inn", "inn", "🛏"),
+        ("The Healer's Hearth", "inn", "☕"),
+    ]
+    for fname, ftype, femoji in fallback_names:
+        if len(taverns) >= 6:
+            break
+        taverns.append({"name": fname, "type": ftype, "emoji": femoji, "amenity": ftype, "lat": lat, "lng": lng, "cuisine": "", "opening_hours": ""})
+
+    return {"taverns": taverns[:8], "location": {"lat": lat, "lng": lng}}
+
+
 @app.post("/companion-chat")
 async def companion_chat(
     message: str = Body(..., embed=True),
