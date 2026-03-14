@@ -26,6 +26,8 @@ from typing import Any
 from dotenv import load_dotenv
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 
 from shared.models import GameMessage, MessageType
 from server.connection_manager import ConnectionManager
@@ -96,6 +98,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Serve web client static files (CSS, JS, etc.)
+_web_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "web")
+if os.path.isdir(_web_dir):
+    app.mount("/static", StaticFiles(directory=_web_dir), name="static")
+
 # Connection manager handles all WebSocket connections
 manager = ConnectionManager()
 
@@ -104,15 +111,25 @@ manager = ConnectionManager()
 # HTTP Endpoints
 # ============================================
 
-@app.get("/")
+@app.get("/api")
 async def root():
-    """Welcome message and server info."""
+    """API info endpoint."""
     return {
         "name": "Anagnorisis",
         "version": "0.1.0",
         "status": "running",
         "message": "Your fate awaits, adventurer...",
     }
+
+
+@app.get("/")
+async def serve_web():
+    """Serve the web client."""
+    import os
+    web_index = os.path.join(os.path.dirname(os.path.dirname(__file__)), "web", "index.html")
+    if os.path.exists(web_index):
+        return FileResponse(web_index)
+    return {"message": "Web client not found. Run from project root."}
 
 
 @app.get("/health")

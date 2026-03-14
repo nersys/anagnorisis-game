@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Anagnorisis — The Moment of Truth</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Cinzel+Decorative:wght@400;700&family=Roboto+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/app.css" />
+</head>
+<body>
+  <div id="app">
+
+    <!-- ═══════════════════════════════════════ -->
+    <!-- LOGIN SCREEN                            -->
+    <!-- ═══════════════════════════════════════ -->
+    <div id="screen-login" class="screen active">
+      <div class="login-bg">
+        <canvas id="login-particles"></canvas>
+      </div>
+      <div class="login-content">
+        <div class="login-header">
+          <h1 class="game-title">ANAGNORISIS</h1>
+          <p class="game-subtitle">The Moment of Truth</p>
+        </div>
+
+        <div class="login-form card">
+          <div class="form-group">
+            <label class="form-label">Adventurer's Name</label>
+            <input id="input-name" type="text" class="form-input" placeholder="Enter your name..." maxlength="24" />
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Choose Your Class</label>
+            <div class="class-grid" id="class-grid">
+              <!-- Populated by JS -->
+            </div>
+          </div>
+
+          <div class="form-group server-config">
+            <button class="btn-link" id="toggle-server-config">⚙ Server Settings</button>
+            <div id="server-config-panel" class="hidden">
+              <input id="input-server" type="text" class="form-input" placeholder="ws://localhost:8000/ws" />
+            </div>
+          </div>
+
+          <div id="login-error" class="error-msg hidden"></div>
+
+          <button id="btn-login" class="btn btn-primary btn-large" disabled>
+            <span>Enter the Dungeon</span>
+            <span class="btn-icon">⚔️</span>
+          </button>
+
+          <div id="login-status" class="status-line hidden">
+            <span class="spinner"></span>
+            <span id="login-status-text">Connecting...</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- ═══════════════════════════════════════ -->
+    <!-- LOBBY SCREEN                            -->
+    <!-- ═══════════════════════════════════════ -->
+    <div id="screen-lobby" class="screen">
+      <div class="lobby-layout">
+
+        <div class="lobby-header">
+          <div class="player-header-card" id="lobby-player-card">
+            <!-- Populated by JS -->
+          </div>
+          <button id="btn-disconnect" class="btn btn-ghost btn-sm">✕ Disconnect</button>
+        </div>
+
+        <div class="lobby-body">
+          <div class="lobby-left">
+            <div class="panel">
+              <div class="panel-header">
+                <h2>⚔ Available Parties</h2>
+                <button id="btn-refresh-parties" class="btn btn-ghost btn-sm">↻ Refresh</button>
+              </div>
+              <div id="party-list" class="party-list">
+                <div class="empty-state">No parties found. Create one!</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="lobby-right">
+            <!-- Create Party Panel -->
+            <div class="panel" id="panel-create-party">
+              <div class="panel-header"><h2>🏰 Create Party</h2></div>
+              <div class="form-group">
+                <label class="form-label">Party Name</label>
+                <input id="input-party-name" type="text" class="form-input" placeholder="The Brave Companions..." maxlength="40" />
+              </div>
+              <button id="btn-create-party" class="btn btn-primary">Create Party</button>
+            </div>
+
+            <!-- Current Party Panel (shown when in party) -->
+            <div class="panel hidden" id="panel-current-party">
+              <div class="panel-header">
+                <h2 id="current-party-name">Party Name</h2>
+                <span id="party-status-badge" class="badge">LOBBY</span>
+              </div>
+              <div id="party-members-list" class="party-members">
+                <!-- Populated by JS -->
+              </div>
+
+              <!-- Adventure start form (leader only) -->
+              <div id="panel-start-adventure" class="hidden">
+                <hr class="divider" />
+                <div class="form-group">
+                  <label class="form-label">Adventure Name</label>
+                  <input id="input-adventure-name" type="text" class="form-input" placeholder="Into the Depths..." maxlength="60" />
+                </div>
+                <div class="form-group">
+                  <label class="form-label">DM Mode</label>
+                  <div class="mode-selector" id="mode-selector">
+                    <button class="mode-btn active" data-mode="guided">⚖ Guided</button>
+                    <button class="mode-btn" data-mode="freeform">✨ Freeform</button>
+                    <button class="mode-btn" data-mode="structured">📜 Structured</button>
+                  </div>
+                </div>
+                <button id="btn-start-adventure" class="btn btn-primary btn-large">
+                  <span>Begin Adventure</span> <span>🐉</span>
+                </button>
+              </div>
+
+              <button id="btn-leave-party" class="btn btn-ghost btn-sm" style="margin-top:8px">Leave Party</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="lobby-message" class="toast hidden"></div>
+      </div>
+    </div>
+
+
+    <!-- ═══════════════════════════════════════ -->
+    <!-- GAME SCREEN                             -->
+    <!-- ═══════════════════════════════════════ -->
+    <div id="screen-game" class="screen">
+      <div class="game-layout">
+
+        <!-- ─── LEFT PANEL ─── -->
+        <div class="game-left">
+          <!-- Dungeon Map -->
+          <div class="panel map-panel">
+            <div class="panel-header">
+              <span>🗺 Dungeon Map</span>
+              <span id="map-progress" class="badge-sm">0/7</span>
+            </div>
+            <canvas id="dungeon-map" width="220" height="220"></canvas>
+            <div class="map-legend">
+              <span><span class="legend-dot you"></span>You</span>
+              <span><span class="legend-dot enemy"></span>Enemy</span>
+              <span><span class="legend-dot loot"></span>Loot</span>
+              <span><span class="legend-dot boss"></span>Boss</span>
+            </div>
+          </div>
+
+          <!-- Stats -->
+          <div class="panel stats-panel" id="stats-panel">
+            <!-- Populated by JS -->
+          </div>
+
+          <!-- Inventory toggle -->
+          <button id="btn-toggle-inventory" class="btn btn-ghost btn-sm full-width">🎒 Inventory & Skills</button>
+        </div>
+
+
+        <!-- ─── CENTER PANEL ─── -->
+        <div class="game-center">
+          <!-- Phase Banner -->
+          <div id="phase-banner" class="phase-banner exploring">
+            <span id="phase-text">EXPLORING</span>
+            <span id="game-time" class="game-time">Day 1 · 06:00</span>
+          </div>
+
+          <!-- Scene Image -->
+          <div class="scene-wrapper" id="scene-wrapper">
+            <img id="scene-image" class="scene-image" src="" alt="Room scene" />
+            <div class="scene-overlay" id="scene-overlay">
+              <div class="scene-loading" id="scene-loading">
+                <span class="spinner"></span>
+                <span>Conjuring vision...</span>
+              </div>
+            </div>
+            <div class="scene-room-name" id="scene-room-name"></div>
+            <button class="btn btn-ghost btn-sm scene-regen-btn" id="btn-regen-image" title="Regenerate scene art">🎨</button>
+          </div>
+
+          <!-- Narrative Log -->
+          <div class="panel log-panel">
+            <div class="panel-header">
+              <span>📖 Chronicle</span>
+              <button class="btn-link" id="btn-clear-log">clear</button>
+            </div>
+            <div id="narrative-log" class="narrative-log">
+              <!-- Populated by JS -->
+            </div>
+          </div>
+
+          <!-- Action Bar -->
+          <div class="action-bar" id="action-bar">
+            <!-- Populated by JS based on phase -->
+          </div>
+        </div>
+
+
+        <!-- ─── RIGHT PANEL ─── -->
+        <div class="game-right">
+          <!-- Combat / Enemies Panel -->
+          <div class="panel" id="combat-panel">
+            <div class="panel-header"><span id="combat-panel-title">⚔ Encounter</span></div>
+            <div id="enemy-list">
+              <div class="empty-state">The room is clear.</div>
+            </div>
+          </div>
+
+          <!-- Party Panel -->
+          <div class="panel" id="game-party-panel">
+            <div class="panel-header"><span>👥 Party</span></div>
+            <div id="game-party-members">
+              <!-- Populated by JS -->
+            </div>
+          </div>
+
+          <!-- Art Generator Panel -->
+          <div class="panel art-panel">
+            <div class="panel-header"><span>🎨 Scene Painter</span></div>
+            <div class="art-form">
+              <textarea id="art-prompt" class="form-input art-textarea" placeholder="Describe what you want to see... (e.g. 'the warrior charges at the dragon')"></textarea>
+              <button id="btn-generate-art" class="btn btn-accent btn-sm full-width">✨ Generate Art</button>
+            </div>
+            <div class="art-gallery" id="art-gallery">
+              <!-- Generated images appear here -->
+            </div>
+          </div>
+        </div>
+
+      </div><!-- end game-layout -->
+
+      <!-- Inventory Modal -->
+      <div class="modal-overlay hidden" id="inventory-modal">
+        <div class="modal card">
+          <div class="modal-header">
+            <h2>🎒 Inventory & Skills</h2>
+            <button class="modal-close" id="btn-close-inventory">✕</button>
+          </div>
+          <div class="modal-body">
+            <div class="modal-section">
+              <h3>Items</h3>
+              <div id="inventory-items" class="item-grid"><!-- JS --></div>
+            </div>
+            <div class="modal-section">
+              <h3>Skills</h3>
+              <div id="inventory-skills" class="skill-grid"><!-- JS --></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- end screen-game -->
+
+  </div><!-- end #app -->
+
+  <script type="module" src="/static/js/app.js"></script>
+</body>
+</html>
