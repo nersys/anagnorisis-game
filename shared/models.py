@@ -59,6 +59,7 @@ class MessageType(str, Enum):
     COMBAT_ACTION = "combat_action"
     LOOT_ROOM = "loot_room"
     USE_ITEM = "use_item"
+    TAVERN_VISIT = "tavern_visit"
     DUNGEON_STATE = "dungeon_state"
     COMBAT_UPDATE = "combat_update"
     ROOM_ENTERED = "room_entered"
@@ -113,6 +114,7 @@ class PlayerStats(BaseModel):
     charisma: int = 10
     level: int = 1
     experience: int = 0
+    gold: int = 0
 
 
 class Player(BaseModel):

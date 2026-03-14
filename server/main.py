@@ -27,10 +27,10 @@ from dotenv import load_dotenv
 import httpx
 import anthropic
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse, RedirectResponse
 
 from shared.models import GameMessage, MessageType
 from server.connection_manager import ConnectionManager
@@ -137,13 +137,37 @@ async def serve_web():
 
 @app.get("/scene-art")
 async def generate_scene_art(
-    prompt: str = Query(..., description="Scene description for Claude to illustrate"),
+    prompt: str = Query(..., description="Scene description to illustrate"),
 ):
     """
-    Use Claude to generate an SVG illustration for the current scene.
-    Claude draws a stylized dark-fantasy scene as SVG — no external image API needed.
+    Generate a scene image. Tries DALL-E 3 first (if OPENAI_API_KEY is set),
+    falls back to Claude SVG generation.
     """
     from fastapi.responses import Response
+
+    # ── Try DALL-E 3 ──────────────────────────────────────────────────────────
+    openai_key = os.getenv("OPENAI_API_KEY")
+    if openai_key:
+        try:
+            import openai as openai_lib
+            client = openai_lib.AsyncOpenAI(api_key=openai_key)
+            dalle_prompt = (
+                f"Dark fantasy RPG game scene: {prompt}. "
+                "Atmospheric cinematic oil painting, dramatic lighting, "
+                "concept art style, wide panoramic shot, 16:9 aspect ratio."
+            )
+            resp = await client.images.generate(
+                model="dall-e-3",
+                prompt=dalle_prompt,
+                size="1792x1024",
+                quality="standard",
+                n=1,
+            )
+            image_url = resp.data[0].url
+            logger.info(f"🎨 DALL-E 3 image generated for: {prompt[:50]}")
+            return RedirectResponse(url=image_url, status_code=302)
+        except Exception as e:
+            logger.warning(f"DALL-E 3 failed ({e}), falling back to Claude SVG")
 
     svg_system = (
         "You are a dark fantasy SVG illustrator. "
@@ -207,6 +231,185 @@ async def generate_scene_art(
   <text x='20' y='330' font-family='serif' font-size='16' fill='#c9a84c' opacity='0.7'>{prompt[:60]}</text>
 </svg>"""
         return Response(content=fallback_svg, media_type="image/svg+xml")
+
+
+@app.get("/location-history")
+async def location_history(
+    name: str = Query(..., description="Location name to look up"),
+    lat: float = Query(0.0),
+    lng: float = Query(0.0),
+):
+    """
+    Return real-world history for a location.
+    Tries Wikipedia first, falls back to Claude generating atmospheric lore.
+    """
+    # ── Try Wikipedia ───────────────────────────────────────────────────────
+    wiki_data = None
+    try:
+        import urllib.parse
+        encoded = urllib.parse.quote(name.replace(" ", "_"))
+        wiki_url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{encoded}"
+        async with httpx.AsyncClient(timeout=6.0) as client:
+            r = await client.get(wiki_url, headers={"User-Agent": "Anagnorisis-Game/1.0"})
+            if r.status_code == 200:
+                data = r.json()
+                if data.get("extract") and data.get("type") != "disambiguation":
+                    wiki_data = {
+                        "title": data.get("title", name),
+                        "extract": data.get("extract", "")[:800],
+                        "thumbnail": (data.get("thumbnail") or {}).get("source"),
+                        "url": data.get("content_urls", {}).get("desktop", {}).get("page"),
+                        "source": "wikipedia",
+                    }
+    except Exception as e:
+        logger.warning(f"Wikipedia lookup failed for '{name}': {e}")
+
+    if wiki_data:
+        return wiki_data
+
+    # ── Fall back to Claude: generate atmospheric game-world lore ───────────
+    try:
+        ai_client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+        prompt = (
+            f"You are a lore-keeper in a dark fantasy RPG set in a real-world city. "
+            f"The player is at '{name}' (coordinates {lat:.4f}, {lng:.4f} in Los Angeles). "
+            f"Write 3-4 sentences of atmospheric historical lore about this real place, "
+            f"blending actual history with dark fantasy elements. "
+            f"Mention real historical facts if you know them, weaving in RPG flavor."
+        )
+        response = ai_client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=300,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        lore = response.content[0].text.strip()
+        return {"title": name, "extract": lore, "thumbnail": None, "url": None, "source": "lore"}
+    except Exception as e:
+        logger.error(f"Lore generation failed: {e}")
+        return {"title": name, "extract": f"The ancient records of {name} have been lost to time...", "thumbnail": None, "url": None, "source": "fallback"}
+
+
+@app.get("/taverns")
+async def find_taverns(
+    lat: float = Query(...),
+    lng: float = Query(...),
+    radius: int = Query(600, description="Search radius in metres"),
+):
+    """
+    Find real bars/pubs/restaurants near the given coordinates using OpenStreetMap Overpass API.
+    Returns them formatted as in-game taverns.
+    """
+    overpass_query = f"""
+[out:json][timeout:10];
+(
+  node[amenity~"^(bar|pub|restaurant|cafe)$"](around:{radius},{lat},{lng});
+);
+out 12;
+"""
+    taverns = []
+    try:
+        async with httpx.AsyncClient(timeout=12.0) as client:
+            r = await client.post(
+                "https://overpass-api.de/api/interpreter",
+                data={"data": overpass_query},
+                headers={"User-Agent": "Anagnorisis-Game/1.0"},
+            )
+            if r.status_code == 200:
+                elements = r.json().get("elements", [])
+                for el in elements:
+                    tags = el.get("tags", {})
+                    real_name = tags.get("name", "")
+                    if not real_name:
+                        continue
+                    amenity = tags.get("amenity", "bar")
+                    # Map real amenity to game tavern type
+                    if amenity in ("bar", "pub"):
+                        ttype, emoji = "tavern", "🍺"
+                    elif amenity == "cafe":
+                        ttype, emoji = "inn", "☕"
+                    else:
+                        ttype, emoji = "alehouse", "🍖"
+
+                    taverns.append({
+                        "name": real_name,
+                        "type": ttype,
+                        "emoji": emoji,
+                        "amenity": amenity,
+                        "lat": el.get("lat", lat),
+                        "lng": el.get("lon", lng),
+                        "cuisine": tags.get("cuisine", ""),
+                        "opening_hours": tags.get("opening_hours", ""),
+                    })
+    except Exception as e:
+        logger.warning(f"Overpass API failed: {e}")
+
+    # If too few results, pad with thematic placeholders
+    fallback_names = [
+        ("The Wandering Blade", "tavern", "🍺"),
+        ("The Dusty Flagon", "tavern", "🍺"),
+        ("Crossroads Inn", "inn", "🛏"),
+        ("The Healer's Hearth", "inn", "☕"),
+    ]
+    for fname, ftype, femoji in fallback_names:
+        if len(taverns) >= 6:
+            break
+        taverns.append({"name": fname, "type": ftype, "emoji": femoji, "amenity": ftype, "lat": lat, "lng": lng, "cuisine": "", "opening_hours": ""})
+
+    return {"taverns": taverns[:8], "location": {"lat": lat, "lng": lng}}
+
+
+@app.post("/companion-chat")
+async def companion_chat(
+    message: str = Body(..., embed=True),
+    player_class: str = Body("warrior", embed=True),
+    player_name: str = Body("Hero", embed=True),
+    context: str = Body("", embed=True),
+):
+    """
+    Chat with your class companion using Claude AI.
+    Returns a short in-character response.
+    """
+    COMPANION_PERSONAS = {
+        "warrior": ("Bryn the Battle-Hardened", "a grizzled veteran warrior and loyal shield-bearer who respects strength and loyalty"),
+        "mage":    ("Luma the Familiar", "a witty magical familiar spirit bound to the mage, knowledgeable but occasionally sarcastic"),
+        "rogue":   ("Shade", "a mysterious shadow-companion who speaks in riddles, values cunning and gold"),
+        "cleric":  ("Seraph", "a divine spirit-guide who offers wisdom and encouragement, occasionally cryptic"),
+        "ranger":  ("Fang", "a loyal wolf companion who communicates through growls and body language, translated into short direct words"),
+    }
+    name, persona = COMPANION_PERSONAS.get(player_class, COMPANION_PERSONAS["warrior"])
+
+    system_prompt = (
+        f"You are {name}, {persona}. "
+        f"You are the companion of {player_name}, a {player_class}. "
+        "Respond in character with 1-3 short sentences. "
+        "Be helpful, in-world, and match the dark fantasy dungeon RPG tone. "
+        "Never break character or mention being an AI."
+    )
+    user_prompt = message
+    if context:
+        user_prompt = f"[Current situation: {context}]\n{message}"
+
+    try:
+        ai_client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+        response = ai_client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=200,
+            system=system_prompt,
+            messages=[{"role": "user", "content": user_prompt}],
+        )
+        reply = response.content[0].text.strip()
+    except Exception as e:
+        logger.error(f"Companion chat failed: {e}")
+        fallback = {
+            "warrior": "Stay alert. We press on.",
+            "mage": "Interesting question... *adjusts spectacles*",
+            "rogue": "Eyes forward. Ask later.",
+            "cleric": "The light guides us. Have faith.",
+            "ranger": "*Fang sniffs the air and glances at you*",
+        }
+        reply = fallback.get(player_class, "...")
+
+    return {"companion": name, "reply": reply}
 
 
 @app.get("/health")

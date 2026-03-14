@@ -157,6 +157,14 @@ function applyStateUpdate(payload) {
   if (payload.dungeon !== undefined) state.dungeon = payload.dungeon;
   if (payload.combat  !== undefined) state.combat  = payload.combat;
   if (payload.phase   !== undefined) state.phase   = payload.phase;
+  // Server often sends player_stats instead of full player object
+  if (payload.player_stats !== undefined && state.player) {
+    state.player = { ...state.player, stats: payload.player_stats };
+  }
+  // Inventory updates from loot/item use
+  if (payload.inventory !== undefined && state.player) {
+    state.player = { ...state.player, inventory: payload.inventory };
+  }
 }
 
 // ═══ la-map.js ═══
@@ -498,10 +506,7 @@ function showScreen(name) {
 // ═══════════════════════════════════════════════════════
 
 function initLogin() {
-  // Particle canvas background
-  initParticles();
-
-  // Render class cards
+  // Render class cards FIRST — particles are optional eye candy
   const grid = document.getElementById('class-grid');
   grid.innerHTML = Object.entries(CLASSES).map(([key, cls]) => `
     <div class="class-card ${key === selectedClass ? 'selected' : ''}"
@@ -538,6 +543,9 @@ function initLogin() {
   // Login button
   document.getElementById('btn-login').addEventListener('click', doLogin);
   nameInput.addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+
+  // Particles are decorative only — never block the UI
+  try { initParticles(); } catch(e) { /* non-critical */ }
 }
 
 function validateLoginForm() {
@@ -789,14 +797,63 @@ function initGame() {
   document.getElementById('btn-toggle-inventory').addEventListener('click', openInventory);
   document.getElementById('btn-close-inventory').addEventListener('click', closeInventory);
   document.getElementById('btn-clear-log').addEventListener('click', () => {
-    document.getElementById('narrative-log').innerHTML = '';
-    state.narrativeLog = [];
+    const log = document.getElementById('narrative-log');
+    // Fade out old entries rather than deleting — new entries still appear
+    log.querySelectorAll('.log-entry').forEach(e => { e.style.opacity = '0.25'; e.style.pointerEvents = 'none'; });
+    const sep = document.createElement('div');
+    sep.className = 'log-separator';
+    sep.textContent = '─────── Chronicle cleared ───────';
+    log.appendChild(sep);
+    log.scrollTop = log.scrollHeight;
   });
   document.getElementById('btn-regen-image').addEventListener('click', () => {
     sceneImageSeed = Math.floor(Math.random() * 99999);
     generateSceneImage(currentRoomData);
   });
   document.getElementById('btn-generate-art').addEventListener('click', generateCustomArt);
+
+  // ── Theme toggle ──
+  const themeBtn = document.getElementById('btn-theme-toggle');
+  const isDark = () => document.documentElement.dataset.theme !== 'light';
+  themeBtn.addEventListener('click', () => {
+    if (isDark()) {
+      document.documentElement.dataset.theme = 'light';
+      themeBtn.textContent = '☀️';
+    } else {
+      delete document.documentElement.dataset.theme;
+      themeBtn.textContent = '🌙';
+    }
+  });
+
+  // ── Companion chat ──
+  const companionInput = document.getElementById('companion-input');
+  document.getElementById('btn-companion-send').addEventListener('click', sendCompanionMessage);
+  companionInput.addEventListener('keydown', e => { if (e.key === 'Enter') sendCompanionMessage(); });
+
+  // ── Location history ──
+  document.getElementById('btn-location-history').addEventListener('click', showLocationHistory);
+  document.getElementById('btn-close-history').addEventListener('click', () => {
+    document.getElementById('history-modal').classList.add('hidden');
+  });
+
+  // ── Tavern finder ──
+  document.getElementById('btn-find-taverns').addEventListener('click', showTaverns);
+  document.getElementById('btn-close-tavern').addEventListener('click', () => {
+    document.getElementById('tavern-modal').classList.add('hidden');
+  });
+
+  // Service card selection
+  let selectedService = 'ale';
+  document.querySelectorAll('.service-card').forEach(card => {
+    card.addEventListener('click', () => {
+      document.querySelectorAll('.service-card').forEach(c => c.classList.remove('selected'));
+      card.classList.add('selected');
+      selectedService = card.dataset.service;
+      window._selectedTavernService = selectedService;
+    });
+  });
+  document.querySelector('.service-card[data-service="ale"]').classList.add('selected');
+  window._selectedTavernService = 'ale';
 }
 
 function renderGameUI() {
@@ -805,6 +862,7 @@ function renderGameUI() {
   renderActionBar();
   renderEnemies();
   renderGameParty();
+  updateCompanionPanel();
   if (laMap && state.dungeon) laMap.render(state.dungeon);
   updateMapProgress();
 }
@@ -1195,6 +1253,191 @@ function generateCustomArt() {
   promptEl.value = '';
 }
 
+// ═══════════════════════════════════════════════════════
+// LOCATION HISTORY
+// ═══════════════════════════════════════════════════════
+
+async function showLocationHistory() {
+  const room = currentRoomData;
+  const locationName = (laMap && laMap.getRoomName(room && room.id)) || (room && room.name) || 'This Location';
+  const lat = (laMap && room && laMap.roomLocations[room.id]) ? laMap.roomLocations[room.id][0] : 34.0522;
+  const lng = (laMap && room && laMap.roomLocations[room.id]) ? laMap.roomLocations[room.id][1] : -118.2437;
+
+  // Open modal, show spinner
+  const modal = document.getElementById('history-modal');
+  const body  = document.getElementById('history-modal-body');
+  const title = document.getElementById('history-modal-title');
+  const sub   = document.getElementById('history-modal-subtitle');
+  const thumb = document.getElementById('history-modal-thumb');
+  const link  = document.getElementById('history-wiki-link');
+
+  title.textContent = `📜 ${locationName}`;
+  sub.textContent = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+  body.innerHTML = '<div class="status-line"><span class="spinner"></span><span>Consulting the ancient scrolls...</span></div>';
+  thumb.innerHTML = '';
+  link.classList.add('hidden');
+  modal.classList.remove('hidden');
+
+  try {
+    const res = await fetch(`/location-history?name=${encodeURIComponent(locationName)}&lat=${lat}&lng=${lng}`);
+    const data = await res.json();
+
+    const sourceBadge = data.source === 'wikipedia'
+      ? '<span class="history-source-badge">Wikipedia</span>'
+      : '<span class="history-source-badge">Game Lore</span>';
+
+    body.innerHTML = sourceBadge + '<p style="margin-top:8px">' + (data.extract || 'No records found.') + '</p>';
+
+    if (data.thumbnail) {
+      thumb.innerHTML = `<img src="${data.thumbnail}" alt="${data.title}" />`;
+    }
+    if (data.url) {
+      link.href = data.url;
+      link.classList.remove('hidden');
+    }
+  } catch (e) {
+    body.innerHTML = '<p style="color:var(--red)">Failed to load location history.</p>';
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// TAVERNS
+// ═══════════════════════════════════════════════════════
+
+async function showTaverns() {
+  const room = currentRoomData;
+  const locationName = (laMap && laMap.getRoomName(room && room.id)) || (room && room.name) || 'your location';
+  const lat = (laMap && room && laMap.roomLocations[room.id]) ? laMap.roomLocations[room.id][0] : 34.0522;
+  const lng = (laMap && room && laMap.roomLocations[room.id]) ? laMap.roomLocations[room.id][1] : -118.2437;
+
+  const modal   = document.getElementById('tavern-modal');
+  const list    = document.getElementById('tavern-list');
+  const label   = document.getElementById('tavern-location-label');
+  const status  = document.getElementById('tavern-action-status');
+
+  label.textContent = `Near ${locationName}`;
+  list.innerHTML = '<div class="status-line"><span class="spinner"></span><span>Scouting establishments...</span></div>';
+  status.classList.add('hidden');
+  modal.classList.remove('hidden');
+
+  try {
+    const res = await fetch(`/taverns?lat=${lat}&lng=${lng}`);
+    const data = await res.json();
+    const taverns = data.taverns || [];
+
+    if (!taverns.length) {
+      list.innerHTML = '<div class="empty-state">No taverns found nearby. The wilderness is barren.</div>';
+      return;
+    }
+
+    list.innerHTML = taverns.map((t, i) => `
+      <div class="tavern-item">
+        <span class="tavern-emoji">${t.emoji}</span>
+        <div class="tavern-info">
+          <div class="tavern-name">${t.name}</div>
+          <div class="tavern-type">${t.type}${t.cuisine ? ' · ' + t.cuisine : ''}</div>
+          ${t.opening_hours ? `<div class="tavern-cuisine">⏰ ${t.opening_hours}</div>` : ''}
+        </div>
+        <button class="tavern-visit-btn" onclick="visitTavern('${t.name.replace(/'/g,"\\'")}')">Visit</button>
+      </div>
+    `).join('');
+  } catch (e) {
+    list.innerHTML = '<p style="color:var(--red);padding:12px">Failed to find nearby taverns.</p>';
+  }
+}
+
+function visitTavern(tavernName) {
+  const service = window._selectedTavernService || 'ale';
+  const status  = document.getElementById('tavern-action-status');
+  const p = state.player;
+  const COSTS = { ale: 10, meal: 25, elixir: 30, rest: 60 };
+  const gold = p ? (p.stats ? p.stats.gold : 0) : 0;
+  const cost = COSTS[service] || 10;
+
+  if (gold < cost) {
+    status.className = 'tavern-action-status error';
+    status.textContent = `⚠️ Not enough gold! You have ${gold}g but need ${cost}g.`;
+    status.classList.remove('hidden');
+    return;
+  }
+
+  status.className = 'tavern-action-status';
+  status.innerHTML = '<span class="spinner"></span> Ordering...';
+  status.classList.remove('hidden');
+
+  ws.send('TAVERN_VISIT', { tavern_name: tavernName, service });
+}
+
+async function sendCompanionMessage() {
+  const input = document.getElementById('companion-input');
+  const msg = input.value.trim();
+  if (!msg) return;
+
+  const p = state.player;
+  const log = document.getElementById('companion-log');
+
+  // Remove placeholder
+  const placeholder = log.querySelector('.empty-state');
+  if (placeholder) placeholder.remove();
+
+  // Show player message
+  const playerEl = document.createElement('div');
+  playerEl.className = 'companion-msg player';
+  playerEl.textContent = msg;
+  log.appendChild(playerEl);
+  input.value = '';
+  log.scrollTop = log.scrollHeight;
+
+  // Build context from current game state
+  const phase = state.phase || 'exploring';
+  const room = currentRoomData;
+  const context = [
+    phase === 'combat' ? 'We are in combat' : `We are ${phase}`,
+    room ? `in ${room.name || 'a dungeon room'}` : '',
+    state.dungeon ? `(${state.dungeon.rooms_cleared || 0} rooms cleared)` : '',
+  ].filter(Boolean).join(', ');
+
+  // Show typing indicator
+  const typingEl = document.createElement('div');
+  typingEl.className = 'companion-msg companion';
+  typingEl.innerHTML = '<span class="companion-sender">...</span><span class="spinner" style="width:10px;height:10px;border-width:1px"></span>';
+  log.appendChild(typingEl);
+  log.scrollTop = log.scrollHeight;
+
+  try {
+    const res = await fetch('/companion-chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: msg,
+        player_class: p ? p.player_class : 'warrior',
+        player_name: p ? p.name : 'Hero',
+        context,
+      }),
+    });
+    const data = await res.json();
+    typingEl.innerHTML = `<span class="companion-sender">${data.companion || 'Companion'}</span>${data.reply || '...'}`;
+    // Also log in chronicle
+    addLog(`💬 ${data.companion}: "${data.reply}"`, 'system');
+  } catch (e) {
+    typingEl.innerHTML = '<span class="companion-sender">Companion</span>*no response*';
+  }
+  log.scrollTop = log.scrollHeight;
+}
+
+function updateCompanionPanel() {
+  const p = state.player;
+  if (!p) return;
+  const COMPANION_NAMES = {
+    warrior: '🛡 Bryn', mage: '✨ Luma', rogue: '🌑 Shade',
+    cleric: '☀️ Seraph', ranger: '🐺 Fang',
+  };
+  const nameEl = document.getElementById('companion-name');
+  const tagEl = document.getElementById('companion-class-tag');
+  if (nameEl) nameEl.textContent = COMPANION_NAMES[p.player_class] || '🗡 Companion';
+  if (tagEl) tagEl.textContent = p.player_class;
+}
+
 function expandImage(url, caption) {
   const overlay = document.createElement('div');
   overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.92);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;cursor:pointer';
@@ -1332,22 +1575,41 @@ function setupHandlers() {
       renderGameUI();
     }
 
-    // Loot collected
-    if (payload.gold_collected !== undefined) {
-      if (payload.player) state.player = payload.player;
-      addLog(`💰 Collected ${payload.gold_collected} gold and ${payload.items_collected || 0} items!`, 'loot');
+    // Loot collected (server sends looted_items + gold + inventory + dungeon)
+    if (payload.looted_items !== undefined) {
+      applyStateUpdate(payload); // handles player_stats, inventory, dungeon
+      const items = payload.looted_items || [];
+      const gold = payload.gold || 0;
+      const parts = [];
+      if (items.length) parts.push(items.map(formatName).join(', '));
+      if (gold > 0) parts.push(`${gold} gold`);
+      addLog(parts.length ? `💰 Looted: ${parts.join(' and ')}!` : '🔍 Nothing left to loot.', 'loot');
       state.phase = 'exploring';
       renderStats();
       renderPhaseBanner();
       renderActionBar();
     }
 
-    // Item used
-    if (msg.message && msg.message.includes('used')) {
-      if (payload.player) state.player = payload.player;
-      addLog(`🧪 ${msg.message}`, 'loot');
+    // Item used outside combat (server sends player_stats + inventory + message, no looted_items)
+    if (payload.message && payload.player_stats && payload.inventory && !payload.looted_items) {
+      applyStateUpdate(payload);
+      addLog(`🧪 ${payload.message}`, 'loot');
       renderStats();
       renderActionBar();
+    }
+
+    // Tavern visit response
+    if (payload.tavern_visited) {
+      applyStateUpdate(payload); // updates player stats (hp, mp, gold)
+      addLog(`🍺 ${payload.message}`, 'loot');
+      renderStats();
+      // Update tavern modal status
+      const status = document.getElementById('tavern-action-status');
+      if (status) {
+        status.className = 'tavern-action-status';
+        status.textContent = `✅ ${payload.message}`;
+        status.classList.remove('hidden');
+      }
     }
   });
 

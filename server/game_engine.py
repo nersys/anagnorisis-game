@@ -145,6 +145,7 @@ class GameEngine:
             MessageType.COMBAT_ACTION: self._handle_combat_action,
             MessageType.LOOT_ROOM: self._handle_loot_room,
             MessageType.USE_ITEM: self._handle_use_item,
+            MessageType.TAVERN_VISIT: self._handle_tavern_visit,
         }
         
         handler = handlers.get(message.type)
@@ -1053,6 +1054,7 @@ class GameEngine:
             total_gold += current_room.gold // 2
 
         player.stats.experience += total_xp
+        player.stats.gold += total_gold
         log.append(f"Victory! You defeated all enemies. +{total_xp} XP, +{total_gold} gold.")
 
         # Mark room cleared
@@ -1128,6 +1130,7 @@ class GameEngine:
         room.items = []
         room.gold = 0
         dungeon.gold_collected += gold
+        player.stats.gold += gold
 
         if not looted and gold == 0:
             msg = "Nothing left to loot here."
@@ -1204,10 +1207,67 @@ class GameEngine:
             }
         )
 
+    async def _handle_tavern_visit(
+        self,
+        connection_id: str,
+        message: GameMessage,
+        manager: ConnectionManager
+    ) -> GameMessage:
+        """Spend gold at a real-world tavern to restore HP/MP."""
+        player_id = self._connection_to_player.get(connection_id)
+        if not player_id:
+            return GameMessage(type=MessageType.ERROR, payload={"error": "Not connected"})
+        player = self._players.get(player_id)
+        if not player:
+            return GameMessage(type=MessageType.ERROR, payload={"error": "Player not found"})
+
+        # Tavern services: cost, hp_restore, mp_restore, description
+        SERVICES = {
+            "ale":     {"cost": 10, "hp": 20,  "mp": 5,   "label": "Ale & Bread",      "emoji": "🍺"},
+            "meal":    {"cost": 25, "hp": 45,  "mp": 15,  "label": "Hearty Meal",       "emoji": "🍖"},
+            "elixir":  {"cost": 30, "hp": 10,  "mp": 45,  "label": "Mage's Elixir",     "emoji": "🔮"},
+            "rest":    {"cost": 60, "hp": 999, "mp": 999, "label": "Full Night's Rest",  "emoji": "🛏"},
+        }
+
+        service_key = message.payload.get("service", "ale")
+        tavern_name = message.payload.get("tavern_name", "The Tavern")
+        svc = SERVICES.get(service_key, SERVICES["ale"])
+
+        if player.stats.gold < svc["cost"]:
+            return GameMessage(
+                type=MessageType.ERROR,
+                payload={"error": f"Not enough gold! {svc['label']} costs {svc['cost']}g (you have {player.stats.gold}g)"}
+            )
+
+        player.stats.gold -= svc["cost"]
+        hp_gained = min(svc["hp"], player.stats.max_health - player.stats.health)
+        mp_gained = min(svc["mp"], player.stats.max_mana - player.stats.mana)
+        player.stats.health = min(player.stats.max_health, player.stats.health + svc["hp"])
+        player.stats.mana   = min(player.stats.max_mana,   player.stats.mana   + svc["mp"])
+
+        msg = (
+            f"You visit {tavern_name} and order {svc['emoji']} {svc['label']} for {svc['cost']}g. "
+            f"Restored +{hp_gained} HP and +{mp_gained} MP. "
+            f"Remaining gold: {player.stats.gold}g."
+        )
+
+        return GameMessage(
+            type=MessageType.SUCCESS,
+            payload={
+                "message": msg,
+                "tavern_visited": tavern_name,
+                "service": service_key,
+                "hp_gained": hp_gained,
+                "mp_gained": mp_gained,
+                "gold_spent": svc["cost"],
+                "player_stats": player.stats.model_dump(),
+            }
+        )
+
     # ============================================
     # Game Clock
     # ============================================
-    
+
     async def run_game_clock(self) -> None:
         """
         Background task that advances the game clock.
