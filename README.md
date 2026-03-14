@@ -107,17 +107,6 @@ mvp/
 
 See `LOCAL_SETUP.md` (not in git) for instructions on sharing with friends.
 
-## Learning Journey
-
-This project is also a learning exercise in distributed systems. Key DDIA concepts explored:
-
-- [ ] Client-Server architecture
-- [ ] WebSocket bidirectional communication  
-- [ ] Database persistence and transactions
-- [ ] Event scheduling and time-based triggers
-- [ ] State synchronization across clients
-- [ ] (Future) Horizontal scaling, message queues
-
 ## License
 
 MIT
