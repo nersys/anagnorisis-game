@@ -580,6 +580,9 @@ html, body {
 .log-entry.victory   { border-color: var(--gold2); background: rgba(240,204,106,0.1); color: var(--gold2); }
 .log-entry.error     { border-color: var(--red); color: var(--red); }
 .log-entry .log-time { font-size: 9px; color: var(--text-muted); margin-left: 8px; }
+.log-entry strong { color: #fff; font-weight: 600; }
+.log-entry em { color: var(--gold); font-style: italic; }
+.log-entry code { background: rgba(255,255,255,0.08); border-radius: 3px; padding: 1px 5px; font-size: 11px; }
 
 /* Action Bar */
 .action-bar {

@@ -650,6 +650,14 @@ function returnToLobby() {
 // NARRATIVE LOG
 // ═══════════════════════════════════════════════════════
 
+function renderMarkdown(text) {
+  return text
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    .replace(/`(.+?)`/g, '<code>$1</code>');
+}
+
 function addLog(text, kind = 'narrative') {
   const el = document.getElementById('narrative-log');
   if (!el) return;
@@ -658,7 +666,7 @@ function addLog(text, kind = 'narrative') {
   entry.className = `log-entry ${kind}`;
   const now = new Date();
   const timeStr = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
-  entry.innerHTML = `${text}<span class="log-time">${timeStr}</span>`;
+  entry.innerHTML = `${renderMarkdown(text)}<span class="log-time">${timeStr}</span>`;
   el.appendChild(entry);
 
   // Auto-scroll
