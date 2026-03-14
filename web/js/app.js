@@ -700,19 +700,27 @@ function generateSceneImage(room) {
   const encoded = encodeURIComponent(prompt);
   const url = `https://image.pollinations.ai/prompt/${encoded}?width=800&height=350&nologo=true&seed=${sceneImageSeed}&model=flux`;
 
-  // Load image
+  const showFallback = () => {
+    img.classList.remove('loading');
+    loading.style.display = 'none';
+    img.style.display = 'none';
+    document.getElementById('scene-wrapper').style.background = roomGradient(room.room_type);
+  };
+
+  // Load image with 20s timeout
   const tempImg = new Image();
+  const timeout = setTimeout(showFallback, 20000);
   tempImg.onload = () => {
+    clearTimeout(timeout);
+    img.style.display = '';
+    document.getElementById('scene-wrapper').style.background = '';
     img.src = url;
     img.classList.remove('loading');
     loading.style.display = 'none';
   };
   tempImg.onerror = () => {
-    img.classList.remove('loading');
-    loading.style.display = 'none';
-    // Show fallback gradient based on room type
-    img.style.display = 'none';
-    document.getElementById('scene-wrapper').style.background = roomGradient(room.room_type);
+    clearTimeout(timeout);
+    showFallback();
   };
   tempImg.src = url;
 }
@@ -1026,9 +1034,18 @@ function setupHandlers() {
         if (payload.party)  state.party  = payload.party;
         showScreen('game');
         renderGameUI();
+
+        // Load the starting room scene image and log
+        const startRoom = payload.dungeon.rooms && payload.dungeon.rooms[payload.dungeon.current_room_id];
+        if (startRoom) {
+          currentRoomData = startRoom;
+          sceneImageSeed = Math.floor(Math.random() * 99999);
+          generateSceneImage(startRoom);
+          document.getElementById('scene-room-name').textContent = startRoom.name || '';
+        }
       }
       if (payload.narrative) addLog(payload.narrative, 'narrative');
-      addLog(`🗡️ The adventure begins!`, 'system');
+      addLog(`🗡️ The adventure begins! Use the arrow buttons to explore.`, 'system');
     } else if (event === 'player_joined') {
       addLog(`👤 ${data.player_name || 'A hero'} joined the party!`, 'system');
     } else if (event === 'player_left') {
