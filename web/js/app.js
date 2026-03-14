@@ -650,6 +650,14 @@ function returnToLobby() {
 // NARRATIVE LOG
 // ═══════════════════════════════════════════════════════
 
+function renderMarkdown(text) {
+  return text
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    .replace(/`(.+?)`/g, '<code>$1</code>');
+}
+
 function addLog(text, kind = 'narrative') {
   const el = document.getElementById('narrative-log');
   if (!el) return;
@@ -658,7 +666,7 @@ function addLog(text, kind = 'narrative') {
   entry.className = `log-entry ${kind}`;
   const now = new Date();
   const timeStr = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
-  entry.innerHTML = `${text}<span class="log-time">${timeStr}</span>`;
+  entry.innerHTML = `${renderMarkdown(text)}<span class="log-time">${timeStr}</span>`;
   el.appendChild(entry);
 
   // Auto-scroll
@@ -679,9 +687,12 @@ function generateSceneImage(room) {
   const img = document.getElementById('scene-image');
   const loading = document.getElementById('scene-loading');
   const nameEl = document.getElementById('scene-room-name');
+  const wrapper = document.getElementById('scene-wrapper');
 
   nameEl.textContent = room.name || '';
-  img.classList.add('loading');
+  // Show gradient immediately — image overlays when ready
+  wrapper.style.background = roomGradient(room.room_type);
+  img.style.display = 'none';
   loading.style.display = 'flex';
 
   const roomDesc = room.description || room.name || 'dungeon room';
@@ -700,30 +711,43 @@ function generateSceneImage(room) {
   const encoded = encodeURIComponent(prompt);
   const url = `https://image.pollinations.ai/prompt/${encoded}?width=800&height=350&nologo=true&seed=${sceneImageSeed}&model=flux`;
 
-  // Load image
-  const tempImg = new Image();
-  tempImg.onload = () => {
-    img.src = url;
+  const showFallback = () => {
     img.classList.remove('loading');
     loading.style.display = 'none';
-  };
-  tempImg.onerror = () => {
-    img.classList.remove('loading');
-    loading.style.display = 'none';
-    // Show fallback gradient based on room type
     img.style.display = 'none';
     document.getElementById('scene-wrapper').style.background = roomGradient(room.room_type);
+  };
+
+  // Load image with 20s timeout
+  const tempImg = new Image();
+  const timeout = setTimeout(showFallback, 20000);
+  tempImg.onload = () => {
+    clearTimeout(timeout);
+    img.src = url;
+    img.style.display = '';
+    img.style.opacity = '0';
+    img.classList.remove('loading');
+    loading.style.display = 'none';
+    // Fade in over gradient
+    requestAnimationFrame(() => {
+      img.style.transition = 'opacity 0.8s ease';
+      img.style.opacity = '1';
+    });
+  };
+  tempImg.onerror = () => {
+    clearTimeout(timeout);
+    showFallback();
   };
   tempImg.src = url;
 }
 
 function roomGradient(type) {
   const gradients = {
-    start:    'linear-gradient(135deg, #0d1f0d, #1a2e1a)',
-    corridor: 'linear-gradient(135deg, #0a0a1a, #141428)',
-    chamber:  'linear-gradient(135deg, #0f0a1e, #1e1230)',
-    treasure: 'linear-gradient(135deg, #1f1800, #2a2400)',
-    boss:     'linear-gradient(135deg, #1a0020, #2a0040)',
+    start:    'radial-gradient(ellipse at 50% 80%, #1a3a1a 0%, #0a1a0a 60%, #050a05 100%)',
+    corridor: 'radial-gradient(ellipse at 30% 70%, #1a1a3a 0%, #0d0d20 60%, #080810 100%)',
+    chamber:  'radial-gradient(ellipse at 50% 60%, #221535 0%, #130d22 60%, #080810 100%)',
+    treasure: 'radial-gradient(ellipse at 50% 80%, #3a2e00 0%, #1f1800 50%, #0a0800 100%)',
+    boss:     'radial-gradient(ellipse at 50% 40%, #3a0a4a 0%, #1a0028 50%, #080010 100%)',
   };
   return gradients[type] || gradients.chamber;
 }
@@ -1026,9 +1050,18 @@ function setupHandlers() {
         if (payload.party)  state.party  = payload.party;
         showScreen('game');
         renderGameUI();
+
+        // Load the starting room scene image and log
+        const startRoom = payload.dungeon.rooms && payload.dungeon.rooms[payload.dungeon.current_room_id];
+        if (startRoom) {
+          currentRoomData = startRoom;
+          sceneImageSeed = Math.floor(Math.random() * 99999);
+          generateSceneImage(startRoom);
+          document.getElementById('scene-room-name').textContent = startRoom.name || '';
+        }
       }
       if (payload.narrative) addLog(payload.narrative, 'narrative');
-      addLog(`🗡️ The adventure begins!`, 'system');
+      addLog(`🗡️ The adventure begins! Use the arrow buttons to explore.`, 'system');
     } else if (event === 'player_joined') {
       addLog(`👤 ${data.player_name || 'A hero'} joined the party!`, 'system');
     } else if (event === 'player_left') {
