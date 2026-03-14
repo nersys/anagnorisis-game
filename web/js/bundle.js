@@ -1102,7 +1102,6 @@ function generateSceneImage(room) {
   img.style.display = 'none';
   loading.style.display = 'flex';
 
-  const realName = (laMap && laMap.getRoomName(room.id)) || room.name || '';
   const zoneName = (laMap && laMap.getZoneName()) || 'Los Angeles';
   const roomDesc = room.description || room.name || 'dungeon room';
   const hasEnemies = room.enemies && room.enemies.length > 0;
