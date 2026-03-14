@@ -58,7 +58,7 @@ export class GameWebSocket {
 
   send(type, payload = {}) {
     if (!this._ws || this._ws.readyState !== WebSocket.OPEN) return false;
-    this._ws.send(JSON.stringify({ type, payload }));
+    this._ws.send(JSON.stringify({ type: type.toLowerCase(), payload }));
     return true;
   }
 
@@ -82,15 +82,13 @@ export class GameWebSocket {
   }
 
   _dispatch(msg) {
-    const type = msg.type;
-    // Call specific type handlers
-    if (this._handlers[type]) {
-      this._handlers[type].forEach(h => h(msg));
-    }
-    // Call wildcard handlers
-    if (this._handlers['*']) {
-      this._handlers['*'].forEach(h => h(msg));
-    }
+    // Match both lowercase (server) and uppercase (legacy) handler keys
+    const lower = (msg.type || '').toLowerCase();
+    const upper = lower.toUpperCase();
+    [lower, upper].forEach(key => {
+      if (this._handlers[key]) this._handlers[key].forEach(h => h(msg));
+    });
+    if (this._handlers['*']) this._handlers['*'].forEach(h => h(msg));
   }
 
   _startHeartbeat() {
