@@ -21,6 +21,7 @@ dependencies = [
 
     # AI
     "anthropic>=0.18.0",
+    "httpx>=0.26.0",
 
     # Shared utilities
     "pydantic>=2.5.0",

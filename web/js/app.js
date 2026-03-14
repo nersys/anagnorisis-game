@@ -5,7 +5,7 @@
 
 import { GameWebSocket } from '/static/js/ws.js';
 import { state, on, applyStateUpdate } from '/static/js/state.js';
-import { MapRenderer } from '/static/js/map.js';
+import { LAMap } from '/static/js/la-map.js';
 
 // ═══════════════════════════════════════════════════════
 // CONSTANTS
@@ -62,7 +62,7 @@ const PHASE_LABELS = {
 // ═══════════════════════════════════════════════════════
 
 const ws = new GameWebSocket();
-let mapRenderer = null;
+let laMap = null;
 let selectedClass = 'warrior';
 let selectedMode = 'guided';
 let currentRoomData = null;
@@ -371,12 +371,11 @@ function lobbyToast(msg) {
 // ═══════════════════════════════════════════════════════
 
 function setupMapCanvas() {
-  const canvas = document.getElementById('dungeon-map');
-  if (!mapRenderer) {
-    mapRenderer = new MapRenderer(canvas);
-    mapRenderer.startAnimation();
+  if (!laMap) {
+    laMap = new LAMap('la-map');
+    laMap.init();
   }
-  if (state.dungeon) mapRenderer.render(state.dungeon);
+  if (state.dungeon) laMap.render(state.dungeon);
 }
 
 function initGame() {
@@ -399,7 +398,7 @@ function renderGameUI() {
   renderActionBar();
   renderEnemies();
   renderGameParty();
-  if (mapRenderer && state.dungeon) mapRenderer.render(state.dungeon);
+  if (laMap && state.dungeon) laMap.render(state.dungeon);
   updateMapProgress();
 }
 
@@ -637,10 +636,10 @@ function updateMapProgress() {
 }
 
 function returnToLobby() {
-  // Clear game state
   state.dungeon = null;
   state.combat = null;
   state.phase = 'exploring';
+  if (laMap) laMap.reset();
   showScreen('lobby');
   renderCurrentParty();
   refreshParties();
@@ -689,27 +688,29 @@ function generateSceneImage(room) {
   const nameEl = document.getElementById('scene-room-name');
   const wrapper = document.getElementById('scene-wrapper');
 
-  nameEl.textContent = room.name || '';
+  const realName = (laMap && laMap.getRoomName(room.id)) || room.name || '';
+  nameEl.textContent = realName;
   // Show gradient immediately — image overlays when ready
   wrapper.style.background = roomGradient(room.room_type);
   img.style.display = 'none';
   loading.style.display = 'flex';
 
+  const realName = (laMap && laMap.getRoomName(room.id)) || room.name || '';
+  const zoneName = (laMap && laMap.getZoneName()) || 'Los Angeles';
   const roomDesc = room.description || room.name || 'dungeon room';
   const hasEnemies = room.enemies && room.enemies.length > 0;
-  const enemyDesc = hasEnemies
-    ? room.enemies.map(e => e.name).join(', ')
-    : '';
+  const enemyDesc = hasEnemies ? room.enemies.map(e => e.name).join(', ') : '';
 
-  let prompt = `dark fantasy dungeon, ${roomDesc}`;
-  if (room.room_type === 'boss') prompt += ', dramatic boss chamber, ancient evil, purple light';
-  if (room.room_type === 'treasure') prompt += ', treasure chest overflowing with gold, gemstones';
-  if (room.room_type === 'start') prompt += ', dungeon entrance, torchlight';
+  let prompt = `dark fantasy RPG scene at ${realName} in ${zoneName}`;
+  if (room.room_type === 'boss') prompt += ', dramatic final boss chamber, ancient evil, purple ominous light';
+  else if (room.room_type === 'treasure') prompt += ', hidden treasure vault, gold and gemstones glowing';
+  else if (room.room_type === 'start') prompt += ', adventure starting point, torch-lit entrance';
+  else prompt += `, ${roomDesc}`;
   if (hasEnemies) prompt += `, ${enemyDesc} creature lurking in shadows`;
-  prompt += ', atmospheric, detailed, concept art, oil painting style, 16:9';
+  prompt += ', cinematic, atmospheric lighting, concept art, oil painting, wide shot';
 
   const encoded = encodeURIComponent(prompt);
-  const url = `https://image.pollinations.ai/prompt/${encoded}?width=800&height=350&nologo=true&seed=${sceneImageSeed}&model=flux`;
+  const url = `/scene-art?prompt=${encoded}`;
 
   const showFallback = () => {
     img.classList.remove('loading');
@@ -758,10 +759,9 @@ function generateCustomArt() {
   if (!prompt) return;
 
   const gallery = document.getElementById('art-gallery');
-  const seed = Math.floor(Math.random() * 99999);
-  const fullPrompt = `${prompt}, dark fantasy, dungeon, RPG, dramatic lighting, detailed art`;
+  const fullPrompt = `${prompt}, dark fantasy RPG, dramatic lighting, Los Angeles`;
   const encoded = encodeURIComponent(fullPrompt);
-  const url = `https://image.pollinations.ai/prompt/${encoded}?width=600&height=400&nologo=true&seed=${seed}&model=flux`;
+  const url = `/scene-art?prompt=${encoded}`;
 
   // Add placeholder
   const item = document.createElement('div');
@@ -954,7 +954,7 @@ function setupHandlers() {
       renderActionBar();
       renderEnemies();
       renderGameParty();
-      if (mapRenderer && state.dungeon) mapRenderer.render(state.dungeon);
+      if (laMap && state.dungeon) laMap.render(state.dungeon);
       updateMapProgress();
     }
   });
@@ -973,7 +973,7 @@ function setupHandlers() {
       currentRoomData = room;
       sceneImageSeed = Math.floor(Math.random() * 99999);
       generateSceneImage(room);
-      if (mapRenderer && state.dungeon) mapRenderer.render(state.dungeon);
+      if (laMap && state.dungeon) laMap.render(state.dungeon);
       updateMapProgress();
     }
 
@@ -996,7 +996,7 @@ function setupHandlers() {
       renderPhaseBanner();
       renderActionBar();
       renderEnemies();
-      if (mapRenderer && state.dungeon) mapRenderer.render(state.dungeon);
+      if (laMap && state.dungeon) laMap.render(state.dungeon);
     }
 
     // Log combat events

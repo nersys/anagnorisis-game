@@ -460,7 +460,7 @@ html, body {
 }
 
 .map-panel { flex-shrink: 0; }
-.map-panel canvas { display: block; width: 100%; height: auto; }
+#la-map { width: 100%; height: 220px; border-radius: 0; }
 .map-legend {
   display: flex; gap: 8px; flex-wrap: wrap;
   padding: 6px 10px;
@@ -746,6 +746,65 @@ html, body {
 .skill-name { font-family: var(--font-title); font-size: 11px; color: var(--purple); }
 .skill-mp { font-size: 9px; color: var(--blue); margin-left: auto; }
 .skill-desc { font-size: 10px; color: var(--text-dim); }
+
+/* ═══════════════════════════════════════════════════════
+   LA MAP MARKERS
+   ═══════════════════════════════════════════════════════ */
+.la-marker {
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  background: var(--surface2);
+  border: 2px solid var(--border2);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px;
+  position: relative;
+  cursor: pointer;
+  transition: transform 0.2s ease;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.6);
+}
+.la-marker:hover { transform: scale(1.15); }
+.la-marker--current {
+  border-color: var(--gold) !important;
+  box-shadow: 0 0 14px rgba(201,168,76,0.8), 0 2px 8px rgba(0,0,0,0.6);
+  background: var(--surface3);
+}
+.la-marker--fog { opacity: 0.4; filter: grayscale(1); }
+.la-marker--cleared { opacity: 0.55; }
+.la-marker--danger { border-color: var(--red) !important; }
+.la-marker--boss {
+  border-color: var(--purple) !important;
+  box-shadow: 0 0 12px rgba(124,58,237,0.6);
+}
+.la-marker__icon { position: relative; z-index: 1; line-height: 1; }
+.la-marker__dot {
+  position: absolute; top: 2px; right: 2px;
+  width: 8px; height: 8px; border-radius: 50%;
+  border: 1px solid rgba(0,0,0,0.5);
+}
+.la-marker__dot--enemy { background: var(--red); }
+.la-marker__dot--clear { background: var(--green); }
+.la-marker__ring {
+  position: absolute; inset: -6px;
+  border-radius: 50%;
+  border: 2px solid var(--gold);
+  animation: ring-pulse 1.5s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes ring-pulse {
+  0%   { transform: scale(1);   opacity: 0.8; }
+  100% { transform: scale(1.6); opacity: 0; }
+}
+
+/* Leaflet popup dark style */
+.la-popup .leaflet-popup-content-wrapper {
+  background: var(--surface);
+  border: 1px solid var(--border2);
+  border-radius: var(--radius);
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+.la-popup .leaflet-popup-tip { background: var(--surface); }
+.leaflet-popup-close-button { color: var(--text-dim) !important; }
 
 /* ═══════════════════════════════════════════════════════
    COMBAT ANIMATIONS
