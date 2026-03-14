@@ -24,7 +24,7 @@ from typing import Optional
 
 from anthropic import Anthropic, APIError
 
-from shared.models import Adventure, Player, AdventureMode
+from shared.models import Adventure, Player, AdventureMode, Room
 
 logger = logging.getLogger("anagnorisis.dm")
 
@@ -201,6 +201,36 @@ Keep response to 2-3 paragraphs."""
 Your action has been noted by the fates. The outcome remains shrouded in mystery.
 Perhaps try again, or attempt something else while the cosmic threads realign."""
     
+    async def describe_room(self, room: Room) -> str:
+        """
+        Generate an atmospheric description for a dungeon room.
+        Used when a player first enters a room.
+        """
+        enemy_list = ", ".join(e.name for e in room.enemies if e.hp > 0) or "none"
+        items_list = ", ".join(i.name for i in room.items) or "none"
+
+        prompt = (
+            f"Describe this dungeon room in 2-3 vivid, atmospheric sentences:\n\n"
+            f"Room name: {room.name}\n"
+            f"Room type: {room.room_type.value}\n"
+            f"Enemies present: {enemy_list}\n"
+            f"Items visible: {items_list}\n\n"
+            f"Base description: {room.description}\n\n"
+            f"Make it tense and immersive. If there are enemies, hint at their presence."
+        )
+
+        try:
+            response = self._client.messages.create(
+                model=self._model,
+                max_tokens=256,
+                system="You are a Dungeon Master writing atmospheric room descriptions for a fantasy dungeon crawler game. Be vivid but concise.",
+                messages=[{"role": "user", "content": prompt}],
+            )
+            return response.content[0].text
+        except Exception as e:
+            logger.error(f"Error generating room description: {e}")
+            return room.description
+
     async def generate_event(
         self,
         adventure: Adventure,
