@@ -498,10 +498,7 @@ function showScreen(name) {
 // ═══════════════════════════════════════════════════════
 
 function initLogin() {
-  // Particle canvas background
-  initParticles();
-
-  // Render class cards
+  // Render class cards FIRST — particles are optional eye candy
   const grid = document.getElementById('class-grid');
   grid.innerHTML = Object.entries(CLASSES).map(([key, cls]) => `
     <div class="class-card ${key === selectedClass ? 'selected' : ''}"
@@ -538,6 +535,9 @@ function initLogin() {
   // Login button
   document.getElementById('btn-login').addEventListener('click', doLogin);
   nameInput.addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+
+  // Particles are decorative only — never block the UI
+  try { initParticles(); } catch(e) { /* non-critical */ }
 }
 
 function validateLoginForm() {
