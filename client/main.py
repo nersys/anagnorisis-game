@@ -210,20 +210,32 @@ class AnagnorisisApp(App):
         payload = message.get("payload", {})
         
         # Update game state based on message
+        current_screen = self.screen
+
         if msg_type == "success":
-            if "player" in payload:
+            if isinstance(current_screen, GameScreen):
+                # Forward success messages (loot, item use, etc.) to game screen
+                await current_screen.handle_game_message(message)
+            elif "player" in payload:
                 self.game_state.set_player(payload["player"])
-                # Move to lobby after login
                 await self.switch_screen(LobbyScreen())
             elif "party" in payload:
                 self.game_state.set_party(payload["party"])
-        
-        elif msg_type == "dm_response" or msg_type == "game_event":
-            # Forward to game screen if active
-            current_screen = self.screen
+
+        elif msg_type in (
+            "dm_response", "game_event",
+            "room_entered", "combat_update",
+            "dungeon_state",
+        ):
             if isinstance(current_screen, GameScreen):
                 await current_screen.handle_game_message(message)
-        
+            elif msg_type == "game_event" and payload.get("event") == "adventure_started":
+                # Switch to game screen on adventure start
+                await self.switch_screen(GameScreen())
+                new_screen = self.screen
+                if isinstance(new_screen, GameScreen):
+                    await new_screen.handle_game_message(message)
+
         elif msg_type == "error":
             self.notify(payload.get("error", "Unknown error"), severity="error")
     
