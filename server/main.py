@@ -24,10 +24,13 @@ from datetime import datetime
 from typing import Any
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+import httpx
+import anthropic
+
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 
 from shared.models import GameMessage, MessageType
 from server.connection_manager import ConnectionManager
@@ -130,6 +133,80 @@ async def serve_web():
     if os.path.exists(web_index):
         return FileResponse(web_index)
     return {"message": "Web client not found. Run from project root."}
+
+
+@app.get("/scene-art")
+async def generate_scene_art(
+    prompt: str = Query(..., description="Scene description for Claude to illustrate"),
+):
+    """
+    Use Claude to generate an SVG illustration for the current scene.
+    Claude draws a stylized dark-fantasy scene as SVG — no external image API needed.
+    """
+    from fastapi.responses import Response
+
+    svg_system = (
+        "You are a dark fantasy SVG illustrator. "
+        "Generate atmospheric SVG artwork (800x350 viewBox) for RPG game scenes. "
+        "Use dark color palettes, gradients, silhouettes, and atmospheric effects. "
+        "Output ONLY valid SVG code — no markdown, no explanation, just the SVG tag."
+    )
+
+    svg_prompt = (
+        f"Create a dark fantasy SVG scene illustration (800x350) for: {prompt}\n\n"
+        "Requirements:\n"
+        "- Dark atmospheric background with gradient sky/environment\n"
+        "- Silhouetted foreground elements (buildings, trees, rocks, ruins)\n"
+        "- A dramatic light source (moon, torch, magic, fire)\n"
+        "- 2-3 enemy/creature silhouettes if enemies are mentioned\n"
+        "- Atmospheric effects (fog, stars, smoke, sparks)\n"
+        "- Location name as styled text at bottom-left\n"
+        "- Color scheme: deep purples, dark blues, amber/gold highlights\n"
+        "Start with <svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 800 350'>"
+    )
+
+    try:
+        ai_client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+        response = ai_client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=4096,
+            system=svg_system,
+            messages=[{"role": "user", "content": svg_prompt}],
+        )
+        svg_text = response.content[0].text.strip()
+
+        # Ensure it's clean SVG
+        if not svg_text.startswith("<svg"):
+            start = svg_text.find("<svg")
+            if start != -1:
+                svg_text = svg_text[start:]
+            else:
+                raise ValueError("No SVG found in response")
+
+        logger.info(f"🎨 SVG scene generated ({len(svg_text)} chars)")
+        return Response(
+            content=svg_text,
+            media_type="image/svg+xml",
+            headers={"Cache-Control": "public, max-age=600"},
+        )
+
+    except Exception as e:
+        logger.error(f"SVG generation failed: {e}")
+        # Fallback: return a minimal atmospheric SVG
+        room_type = "dungeon"
+        fallback_svg = f"""<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 800 350'>
+  <defs>
+    <radialGradient id='g' cx='50%' cy='40%' r='60%'>
+      <stop offset='0%' stop-color='#2a1a4a'/>
+      <stop offset='100%' stop-color='#080810'/>
+    </radialGradient>
+  </defs>
+  <rect width='800' height='350' fill='url(#g)'/>
+  <circle cx='400' cy='80' r='30' fill='#c9a84c' opacity='0.3'/>
+  <circle cx='400' cy='80' r='15' fill='#f0cc6a' opacity='0.6'/>
+  <text x='20' y='330' font-family='serif' font-size='16' fill='#c9a84c' opacity='0.7'>{prompt[:60]}</text>
+</svg>"""
+        return Response(content=fallback_svg, media_type="image/svg+xml")
 
 
 @app.get("/health")

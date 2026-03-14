@@ -7,6 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Cinzel+Decorative:wght@400;700&family=Roboto+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="/static/app.css" />
 </head>
 <body>
@@ -152,7 +153,7 @@
               <span>🗺 Dungeon Map</span>
               <span id="map-progress" class="badge-sm">0/7</span>
             </div>
-            <canvas id="dungeon-map" width="220" height="220"></canvas>
+            <div id="la-map"></div>
             <div class="map-legend">
               <span><span class="legend-dot you"></span>You</span>
               <span><span class="legend-dot enemy"></span>Enemy</span>
@@ -267,6 +268,7 @@
 
   </div><!-- end #app -->
 
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script type="module" src="/static/js/app.js"></script>
 </body>
 </html>
