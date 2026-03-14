@@ -11,6 +11,9 @@ import { MapRenderer } from '/static/js/map.js';
 // CONSTANTS
 // ═══════════════════════════════════════════════════════
 
+/** Player stats live under player.stats — this helper flattens access */
+function ps(player) { return (player && player.stats) ? player.stats : (player || {}); }
+
 const CLASSES = {
   warrior: { emoji: '⚔️', name: 'Warrior', tag: 'Tank & Brawler', color: '#e53935' },
   mage:    { emoji: '🔮', name: 'Mage',    tag: 'Arcane Power',  color: '#7c3aed' },
@@ -254,14 +257,15 @@ function renderLobbyPlayer() {
   const player = state.player;
   if (!player) return;
   const cls = CLASSES[player.player_class] || CLASSES.warrior;
-  const pct = pctOf(player.health, player.max_health);
-  const mptc = pctOf(player.mana, player.max_mana);
+  const s = ps(player);
+  const pct = pctOf(s.health, s.max_health);
+  const mptc = pctOf(s.mana, s.max_mana);
 
   document.getElementById('lobby-player-card').innerHTML = `
     <div class="class-emoji-lg">${cls.emoji}</div>
     <div class="player-info">
       <h3>${player.name}</h3>
-      <p>${cls.name} · Level ${player.level} · ${player.gold || 0} gold</p>
+      <p>${cls.name} · Level ${s.level || 1} · ${s.gold || 0} gold</p>
     </div>
     <div class="mini-bars">
       ${miniBar(pct, 'hp')}
@@ -403,10 +407,11 @@ function renderStats() {
   const p = state.player;
   if (!p) return;
   const cls = CLASSES[p.player_class] || CLASSES.warrior;
-  const hpPct = pctOf(p.health, p.max_health);
-  const mpPct = pctOf(p.mana, p.max_mana);
-  const xpNeed = [0,100,250,500,900,1400,2000,2700,3500,4500][p.level] || 999;
-  const xpPct = pctOf(p.xp || 0, xpNeed);
+  const s = ps(p);
+  const hpPct = pctOf(s.health, s.max_health);
+  const mpPct = pctOf(s.mana, s.max_mana);
+  const xpNeed = [0,100,250,500,900,1400,2000,2700,3500,4500][s.level] || 999;
+  const xpPct = pctOf(s.xp || 0, xpNeed);
   const hpLow = hpPct < 25;
 
   document.getElementById('stats-panel').innerHTML = `
@@ -414,26 +419,26 @@ function renderStats() {
       <span class="class-emoji">${cls.emoji}</span>
       <div>
         <h3>${p.name}</h3>
-        <p>${cls.name} · Lv ${p.level}</p>
+        <p>${cls.name} · Lv ${s.level || 1}</p>
       </div>
     </div>
     <div class="bar-wrap">
-      <div class="bar-label"><span>❤️ HP</span><span>${p.health}/${p.max_health}</span></div>
+      <div class="bar-label"><span>❤️ HP</span><span>${s.health}/${s.max_health}</span></div>
       <div class="bar-track"><div class="bar-fill bar-hp ${hpLow?'low':''}" style="width:${hpPct}%"></div></div>
     </div>
     <div class="bar-wrap">
-      <div class="bar-label"><span>💙 MP</span><span>${p.mana}/${p.max_mana}</span></div>
+      <div class="bar-label"><span>💙 MP</span><span>${s.mana}/${s.max_mana}</span></div>
       <div class="bar-track"><div class="bar-fill bar-mp" style="width:${mpPct}%"></div></div>
     </div>
     <div class="bar-wrap">
-      <div class="bar-label"><span>⭐ XP</span><span>${p.xp||0}/${xpNeed}</span></div>
+      <div class="bar-label"><span>⭐ XP</span><span>${s.xp||0}/${xpNeed}</span></div>
       <div class="bar-track" style="height:4px"><div class="bar-fill bar-xp" style="width:${xpPct}%"></div></div>
     </div>
     <div class="stats-grid">
-      <div class="stat-item"><div class="stat-label">Gold</div><div class="stat-value stat-gold">💰 ${p.gold||0}</div></div>
-      <div class="stat-item"><div class="stat-label">STR</div><div class="stat-value stat-str">${p.strength||0}</div></div>
-      <div class="stat-item"><div class="stat-label">INT</div><div class="stat-value stat-int">${p.intelligence||0}</div></div>
-      <div class="stat-item"><div class="stat-label">DEX</div><div class="stat-value stat-dex">${p.dexterity||0}</div></div>
+      <div class="stat-item"><div class="stat-label">Gold</div><div class="stat-value stat-gold">💰 ${s.gold||0}</div></div>
+      <div class="stat-item"><div class="stat-label">STR</div><div class="stat-value stat-str">${s.strength||0}</div></div>
+      <div class="stat-item"><div class="stat-label">INT</div><div class="stat-value stat-int">${s.intelligence||0}</div></div>
+      <div class="stat-item"><div class="stat-label">DEX</div><div class="stat-value stat-dex">${s.dexterity||0}</div></div>
     </div>
   `;
 }
@@ -463,7 +468,7 @@ function renderActionBar() {
   if (phase === 'combat') {
     const p = state.player;
     const skills = (p && p.skills) ? p.skills.slice(0, 3) : [];
-    const hasPotion = p && p.inventory && p.inventory.some(i => i.name === 'health_potion' || i.includes?.('health_potion'));
+    const hasPotion = p && p.inventory && p.inventory.some(i => (typeof i === 'string' ? i : i.name || '').includes('health_potion'));
 
     bar.innerHTML = `
       <div class="action-group">
@@ -486,7 +491,7 @@ function renderActionBar() {
     skills.forEach(skillKey => {
       const skill = SKILLS[skillKey] || { name: skillKey, emoji: '✨', mp: 0 };
       const p = state.player;
-      const canUse = !p || (p.mana >= skill.mp);
+      const canUse = !p || (ps(p).mana >= skill.mp);
       const btn = document.createElement('button');
       btn.className = 'skill-btn';
       btn.disabled = !canUse;
@@ -610,7 +615,7 @@ function renderGameParty() {
     const member = isSelf ? p : null;
     const cls = member ? (CLASSES[member.player_class] || CLASSES.warrior) : { emoji: '👤' };
     const name = member ? member.name : `Player...`;
-    const hpPct = member ? pctOf(member.health, member.max_health) : 100;
+    const hpPct = member ? pctOf(ps(member).health, ps(member).max_health) : 100;
     return `<div class="game-party-member">
       <div class="gpm-header">
         <span class="gpm-emoji">${cls.emoji}</span>
@@ -1009,10 +1014,20 @@ function setupHandlers() {
   // Game events (world events, broadcasts)
   ws.on('GAME_EVENT', msg => {
     const payload = msg.payload || {};
-    const event = payload.event_type || '';
-    const data = payload.data || {};
+    const event = payload.event || payload.event_type || '';
+    const data = payload.data || payload;
 
     if (event === 'adventure_started') {
+      // Server sends dungeon + player + phase here — transition to game
+      if (payload.dungeon) {
+        state.dungeon = payload.dungeon;
+        state.phase   = payload.phase || 'exploring';
+        if (payload.player) state.player = payload.player;
+        if (payload.party)  state.party  = payload.party;
+        showScreen('game');
+        renderGameUI();
+      }
+      if (payload.narrative) addLog(payload.narrative, 'narrative');
       addLog(`🗡️ The adventure begins!`, 'system');
     } else if (event === 'player_joined') {
       addLog(`👤 ${data.player_name || 'A hero'} joined the party!`, 'system');
