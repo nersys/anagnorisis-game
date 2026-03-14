@@ -2,33 +2,33 @@
    ANAGNORISIS — Dark Fantasy Web Client
    ═══════════════════════════════════════════════════════ */
 
-/* ─── CSS Variables ─── */
+/* ─── CSS Variables — Dark Mode (default) ─── */
 :root {
   --bg:        #080810;
-  --bg2:       #0e0e1a;
-  --surface:   #141428;
-  --surface2:  #1c1c35;
-  --surface3:  #242445;
-  --border:    #2a2a50;
-  --border2:   #3a3a70;
+  --bg2:       #0d0d1c;
+  --surface:   #131325;
+  --surface2:  #1a1a32;
+  --surface3:  #21213f;
+  --border:    #28284a;
+  --border2:   #383868;
 
   --gold:      #c9a84c;
   --gold2:     #f0cc6a;
-  --gold-dim:  #6b571e;
+  --gold-dim:  #5a4818;
 
   --red:       #e53935;
-  --red-dim:   #5c1a1a;
+  --red-dim:   #4a1414;
   --green:     #43a047;
-  --green-dim: #1b3d1d;
+  --green-dim: #163318;
   --blue:      #1e88e5;
-  --blue-dim:  #0d2e52;
+  --blue-dim:  #0a2540;
   --cyan:      #00bcd4;
   --purple:    #7c3aed;
   --orange:    #ff9800;
 
-  --text:      #dde0ef;
-  --text-dim:  #7b7faa;
-  --text-muted:#4a4d6a;
+  --text:      #e2e4f0;
+  --text-dim:  #8085b0;
+  --text-muted:#50547a;
 
   --font-title: 'Cinzel', serif;
   --font-deco:  'Cinzel Decorative', serif;
@@ -36,13 +36,66 @@
 
   --radius:    8px;
   --radius-lg: 14px;
-  --shadow:    0 4px 24px rgba(0,0,0,0.6);
-  --shadow-gold: 0 0 20px rgba(201,168,76,0.3);
-  --glow-red:  0 0 16px rgba(229,57,53,0.5);
-  --glow-blue: 0 0 16px rgba(30,136,229,0.4);
+  --shadow:    0 4px 28px rgba(0,0,0,0.7);
+  --shadow-gold: 0 0 24px rgba(201,168,76,0.25);
+  --glow-red:  0 0 18px rgba(229,57,53,0.55);
+  --glow-blue: 0 0 18px rgba(30,136,229,0.45);
 
-  --transition: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition: 0.22s cubic-bezier(0.4, 0, 0.2, 1);
 }
+
+/* ─── Light Mode ─── */
+[data-theme="light"] {
+  --bg:        #f4f3ee;
+  --bg2:       #eceae0;
+  --surface:   #faf9f5;
+  --surface2:  #f0eeea;
+  --surface3:  #e5e3dc;
+  --border:    #d0cdc4;
+  --border2:   #b8b5ac;
+
+  --gold:      #8a6a10;
+  --gold2:     #a07c18;
+  --gold-dim:  #f5e9c8;
+
+  --red:       #c62828;
+  --red-dim:   #fce8e8;
+  --green:     #2e7d32;
+  --green-dim: #e8f5e9;
+  --blue:      #1565c0;
+  --blue-dim:  #e3f0fc;
+  --cyan:      #00838f;
+  --purple:    #5b21b6;
+  --orange:    #e65100;
+
+  --text:      #1a1814;
+  --text-dim:  #5a5548;
+  --text-muted:#8a8478;
+
+  --shadow:    0 2px 16px rgba(0,0,0,0.12);
+  --shadow-gold: 0 0 16px rgba(138,106,16,0.2);
+  --glow-red:  0 0 12px rgba(198,40,40,0.3);
+  --glow-blue: 0 0 12px rgba(21,101,192,0.3);
+}
+[data-theme="light"] #screen-login {
+  background: radial-gradient(ellipse at 50% 30%, #d4c9a8 0%, #eceae0 70%);
+}
+[data-theme="light"] .game-title {
+  text-shadow: 0 0 20px rgba(138,106,16,0.5);
+}
+[data-theme="light"] .login-form {
+  background: rgba(250,249,245,0.95);
+}
+[data-theme="light"] .phase-banner.exploring { background: linear-gradient(90deg, #c8e6c9, transparent); }
+[data-theme="light"] .phase-banner.combat    { background: linear-gradient(90deg, #ffcdd2, transparent); }
+[data-theme="light"] .phase-banner.looting   { background: linear-gradient(90deg, #fff9c4, transparent); }
+[data-theme="light"] .bar-hp { background: linear-gradient(90deg, #e53935, #66bb6a); }
+[data-theme="light"] .log-entry.narrative { background: rgba(21,101,192,0.06); }
+[data-theme="light"] .log-entry.combat    { background: rgba(198,40,40,0.06); color: #c62828; }
+[data-theme="light"] .log-entry.loot      { background: rgba(138,106,16,0.08); color: var(--gold); }
+[data-theme="light"] .log-entry.system    { background: rgba(0,131,143,0.06); color: var(--cyan); }
+[data-theme="light"] .enemy-card { background: #fdf6f6; border-color: #ffcdd2; }
+[data-theme="light"] .enemy-name { color: var(--red); }
 
 /* ─── Reset & Base ─── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -844,6 +897,63 @@ html, body {
   0%   { opacity:1; transform:translateY(0) scale(1); }
   50%  { opacity:1; transform:translateY(-40px) scale(1.2); }
   100% { opacity:0; transform:translateY(-80px) scale(0.8); }
+}
+
+/* ─── Companion Chat Panel ─── */
+.companion-panel { display: flex; flex-direction: column; }
+.companion-log {
+  flex: 1;
+  min-height: 80px;
+  max-height: 160px;
+  overflow-y: auto;
+  padding: 8px 10px;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.companion-msg {
+  font-size: 11px;
+  line-height: 1.5;
+  padding: 6px 8px;
+  border-radius: var(--radius);
+}
+.companion-msg.player {
+  background: var(--surface2);
+  color: var(--text-dim);
+  text-align: right;
+  border-left: none;
+  border-right: 3px solid var(--border2);
+}
+.companion-msg.companion {
+  background: rgba(124,58,237,0.1);
+  border-left: 3px solid var(--purple);
+  color: var(--text);
+}
+.companion-msg .companion-sender {
+  font-family: var(--font-title);
+  font-size: 9px;
+  color: var(--purple);
+  display: block;
+  margin-bottom: 2px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+.companion-input-row {
+  display: flex; gap: 6px;
+  padding: 8px 10px;
+  border-top: 1px solid var(--border);
+}
+.companion-input-row .form-input {
+  font-size: 11px;
+  padding: 6px 10px;
+}
+
+/* ─── Log separator ─── */
+.log-separator {
+  text-align: center;
+  font-size: 9px;
+  color: var(--text-muted);
+  letter-spacing: 2px;
+  padding: 6px 0;
+  font-family: var(--font-title);
 }
 
 /* Victory / Game Over overlays */

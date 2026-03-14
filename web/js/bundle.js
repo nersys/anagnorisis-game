@@ -157,6 +157,14 @@ function applyStateUpdate(payload) {
   if (payload.dungeon !== undefined) state.dungeon = payload.dungeon;
   if (payload.combat  !== undefined) state.combat  = payload.combat;
   if (payload.phase   !== undefined) state.phase   = payload.phase;
+  // Server often sends player_stats instead of full player object
+  if (payload.player_stats !== undefined && state.player) {
+    state.player = { ...state.player, stats: payload.player_stats };
+  }
+  // Inventory updates from loot/item use
+  if (payload.inventory !== undefined && state.player) {
+    state.player = { ...state.player, inventory: payload.inventory };
+  }
 }
 
 // ═══ la-map.js ═══
@@ -789,14 +797,38 @@ function initGame() {
   document.getElementById('btn-toggle-inventory').addEventListener('click', openInventory);
   document.getElementById('btn-close-inventory').addEventListener('click', closeInventory);
   document.getElementById('btn-clear-log').addEventListener('click', () => {
-    document.getElementById('narrative-log').innerHTML = '';
-    state.narrativeLog = [];
+    const log = document.getElementById('narrative-log');
+    // Fade out old entries rather than deleting — new entries still appear
+    log.querySelectorAll('.log-entry').forEach(e => { e.style.opacity = '0.25'; e.style.pointerEvents = 'none'; });
+    const sep = document.createElement('div');
+    sep.className = 'log-separator';
+    sep.textContent = '─────── Chronicle cleared ───────';
+    log.appendChild(sep);
+    log.scrollTop = log.scrollHeight;
   });
   document.getElementById('btn-regen-image').addEventListener('click', () => {
     sceneImageSeed = Math.floor(Math.random() * 99999);
     generateSceneImage(currentRoomData);
   });
   document.getElementById('btn-generate-art').addEventListener('click', generateCustomArt);
+
+  // ── Theme toggle ──
+  const themeBtn = document.getElementById('btn-theme-toggle');
+  const isDark = () => document.documentElement.dataset.theme !== 'light';
+  themeBtn.addEventListener('click', () => {
+    if (isDark()) {
+      document.documentElement.dataset.theme = 'light';
+      themeBtn.textContent = '☀️';
+    } else {
+      delete document.documentElement.dataset.theme;
+      themeBtn.textContent = '🌙';
+    }
+  });
+
+  // ── Companion chat ──
+  const companionInput = document.getElementById('companion-input');
+  document.getElementById('btn-companion-send').addEventListener('click', sendCompanionMessage);
+  companionInput.addEventListener('keydown', e => { if (e.key === 'Enter') sendCompanionMessage(); });
 }
 
 function renderGameUI() {
@@ -805,6 +837,7 @@ function renderGameUI() {
   renderActionBar();
   renderEnemies();
   renderGameParty();
+  updateCompanionPanel();
   if (laMap && state.dungeon) laMap.render(state.dungeon);
   updateMapProgress();
 }
@@ -841,7 +874,7 @@ function renderStats() {
       <div class="bar-track" style="height:4px"><div class="bar-fill bar-xp" style="width:${xpPct}%"></div></div>
     </div>
     <div class="stats-grid">
-      <div class="stat-item"><div class="stat-label">Gold</div><div class="stat-value stat-gold">💰 ${s.gold||0}</div></div>
+      <div class="stat-item"><div class="stat-label">Gold</div><div class="stat-value stat-gold">💰 ${(state.dungeon&&state.dungeon.gold_collected)||s.gold||0}</div></div>
       <div class="stat-item"><div class="stat-label">STR</div><div class="stat-value stat-str">${s.strength||0}</div></div>
       <div class="stat-item"><div class="stat-label">INT</div><div class="stat-value stat-int">${s.intelligence||0}</div></div>
       <div class="stat-item"><div class="stat-label">DEX</div><div class="stat-value stat-dex">${s.dexterity||0}</div></div>
@@ -1195,6 +1228,76 @@ function generateCustomArt() {
   promptEl.value = '';
 }
 
+async function sendCompanionMessage() {
+  const input = document.getElementById('companion-input');
+  const msg = input.value.trim();
+  if (!msg) return;
+
+  const p = state.player;
+  const log = document.getElementById('companion-log');
+
+  // Remove placeholder
+  const placeholder = log.querySelector('.empty-state');
+  if (placeholder) placeholder.remove();
+
+  // Show player message
+  const playerEl = document.createElement('div');
+  playerEl.className = 'companion-msg player';
+  playerEl.textContent = msg;
+  log.appendChild(playerEl);
+  input.value = '';
+  log.scrollTop = log.scrollHeight;
+
+  // Build context from current game state
+  const phase = state.phase || 'exploring';
+  const room = currentRoomData;
+  const context = [
+    phase === 'combat' ? 'We are in combat' : `We are ${phase}`,
+    room ? `in ${room.name || 'a dungeon room'}` : '',
+    state.dungeon ? `(${state.dungeon.rooms_cleared || 0} rooms cleared)` : '',
+  ].filter(Boolean).join(', ');
+
+  // Show typing indicator
+  const typingEl = document.createElement('div');
+  typingEl.className = 'companion-msg companion';
+  typingEl.innerHTML = '<span class="companion-sender">...</span><span class="spinner" style="width:10px;height:10px;border-width:1px"></span>';
+  log.appendChild(typingEl);
+  log.scrollTop = log.scrollHeight;
+
+  try {
+    const res = await fetch('/companion-chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: msg,
+        player_class: p ? p.player_class : 'warrior',
+        player_name: p ? p.name : 'Hero',
+        context,
+      }),
+    });
+    const data = await res.json();
+    typingEl.innerHTML = `<span class="companion-sender">${data.companion || 'Companion'}</span>${data.reply || '...'}`;
+    // Also log in chronicle
+    addLog(`💬 ${data.companion}: "${data.reply}"`, 'system');
+  } catch (e) {
+    typingEl.innerHTML = '<span class="companion-sender">Companion</span>*no response*';
+  }
+  log.scrollTop = log.scrollHeight;
+}
+
+function updateCompanionPanel() {
+  const p = state.player;
+  if (!p) return;
+  const COMPANION_NAMES = {
+    warrior: '🛡 Bryn', mage: '✨ Luma', rogue: '🌑 Shade',
+    cleric: '☀️ Seraph', ranger: '🐺 Fang',
+  };
+  const nameEl = document.getElementById('companion-name');
+  const tagEl = document.getElementById('companion-class-tag');
+  if (nameEl) nameEl.textContent = COMPANION_NAMES[p.player_class] || '🗡 Companion';
+  if (tagEl) tagEl.textContent = p.player_class;
+}
+
 function expandImage(url, caption) {
   const overlay = document.createElement('div');
   overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.92);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;cursor:pointer';
@@ -1332,20 +1435,25 @@ function setupHandlers() {
       renderGameUI();
     }
 
-    // Loot collected
-    if (payload.gold_collected !== undefined) {
-      if (payload.player) state.player = payload.player;
-      addLog(`💰 Collected ${payload.gold_collected} gold and ${payload.items_collected || 0} items!`, 'loot');
+    // Loot collected (server sends looted_items + gold + inventory + dungeon)
+    if (payload.looted_items !== undefined) {
+      applyStateUpdate(payload); // handles player_stats, inventory, dungeon
+      const items = payload.looted_items || [];
+      const gold = payload.gold || 0;
+      const parts = [];
+      if (items.length) parts.push(items.map(formatName).join(', '));
+      if (gold > 0) parts.push(`${gold} gold`);
+      addLog(parts.length ? `💰 Looted: ${parts.join(' and ')}!` : '🔍 Nothing left to loot.', 'loot');
       state.phase = 'exploring';
       renderStats();
       renderPhaseBanner();
       renderActionBar();
     }
 
-    // Item used
-    if (msg.message && msg.message.includes('used')) {
-      if (payload.player) state.player = payload.player;
-      addLog(`🧪 ${msg.message}`, 'loot');
+    // Item used outside combat (server sends player_stats + inventory + message, no looted_items)
+    if (payload.message && payload.player_stats && payload.inventory && !payload.looted_items) {
+      applyStateUpdate(payload);
+      addLog(`🧪 ${payload.message}`, 'loot');
       renderStats();
       renderActionBar();
     }

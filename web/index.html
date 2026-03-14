@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Cinzel+Decorative:wght@400;700&family=Roboto+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <link rel="stylesheet" href="/static/app.css?v=2" />
+  <link rel="stylesheet" href="/static/app.css?v=3" />
 </head>
 <body>
   <div id="app">
@@ -178,7 +178,10 @@
           <!-- Phase Banner -->
           <div id="phase-banner" class="phase-banner exploring">
             <span id="phase-text">EXPLORING</span>
-            <span id="game-time" class="game-time">Day 1 · 06:00</span>
+            <div style="display:flex;align-items:center;gap:10px">
+              <span id="game-time" class="game-time">Day 1 · 06:00</span>
+              <button id="btn-theme-toggle" class="btn btn-ghost btn-sm btn-icon-only" title="Toggle light/dark mode" style="width:30px;height:30px;font-size:14px;padding:0">🌙</button>
+            </div>
           </div>
 
           <!-- Scene Image -->
@@ -230,11 +233,26 @@
             </div>
           </div>
 
+          <!-- Companion Chat Panel -->
+          <div class="panel companion-panel" id="companion-panel">
+            <div class="panel-header">
+              <span id="companion-name">🐺 Companion</span>
+              <span class="badge-sm" id="companion-class-tag"></span>
+            </div>
+            <div class="companion-log" id="companion-log">
+              <div class="empty-state" style="font-size:11px">Your companion awaits your call...</div>
+            </div>
+            <div class="companion-input-row">
+              <input id="companion-input" class="form-input" type="text" placeholder="Ask your companion..." maxlength="120" />
+              <button id="btn-companion-send" class="btn btn-accent btn-sm">Ask</button>
+            </div>
+          </div>
+
           <!-- Art Generator Panel -->
           <div class="panel art-panel">
             <div class="panel-header"><span>🎨 Scene Painter</span></div>
             <div class="art-form">
-              <textarea id="art-prompt" class="form-input art-textarea" placeholder="Describe what you want to see... (e.g. 'the warrior charges at the dragon')"></textarea>
+              <textarea id="art-prompt" class="form-input art-textarea" placeholder="Describe what you want to see..."></textarea>
               <button id="btn-generate-art" class="btn btn-accent btn-sm full-width">✨ Generate Art</button>
             </div>
             <div class="art-gallery" id="art-gallery">
@@ -270,6 +288,6 @@
   </div><!-- end #app -->
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="/static/js/bundle.js?v=5"></script>
+  <script src="/static/js/bundle.js?v=6"></script>
 </body>
 </html>

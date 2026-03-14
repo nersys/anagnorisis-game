@@ -27,10 +27,10 @@ from dotenv import load_dotenv
 import httpx
 import anthropic
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse, RedirectResponse
 
 from shared.models import GameMessage, MessageType
 from server.connection_manager import ConnectionManager
@@ -137,13 +137,37 @@ async def serve_web():
 
 @app.get("/scene-art")
 async def generate_scene_art(
-    prompt: str = Query(..., description="Scene description for Claude to illustrate"),
+    prompt: str = Query(..., description="Scene description to illustrate"),
 ):
     """
-    Use Claude to generate an SVG illustration for the current scene.
-    Claude draws a stylized dark-fantasy scene as SVG — no external image API needed.
+    Generate a scene image. Tries DALL-E 3 first (if OPENAI_API_KEY is set),
+    falls back to Claude SVG generation.
     """
     from fastapi.responses import Response
+
+    # ── Try DALL-E 3 ──────────────────────────────────────────────────────────
+    openai_key = os.getenv("OPENAI_API_KEY")
+    if openai_key:
+        try:
+            import openai as openai_lib
+            client = openai_lib.AsyncOpenAI(api_key=openai_key)
+            dalle_prompt = (
+                f"Dark fantasy RPG game scene: {prompt}. "
+                "Atmospheric cinematic oil painting, dramatic lighting, "
+                "concept art style, wide panoramic shot, 16:9 aspect ratio."
+            )
+            resp = await client.images.generate(
+                model="dall-e-3",
+                prompt=dalle_prompt,
+                size="1792x1024",
+                quality="standard",
+                n=1,
+            )
+            image_url = resp.data[0].url
+            logger.info(f"🎨 DALL-E 3 image generated for: {prompt[:50]}")
+            return RedirectResponse(url=image_url, status_code=302)
+        except Exception as e:
+            logger.warning(f"DALL-E 3 failed ({e}), falling back to Claude SVG")
 
     svg_system = (
         "You are a dark fantasy SVG illustrator. "
@@ -207,6 +231,60 @@ async def generate_scene_art(
   <text x='20' y='330' font-family='serif' font-size='16' fill='#c9a84c' opacity='0.7'>{prompt[:60]}</text>
 </svg>"""
         return Response(content=fallback_svg, media_type="image/svg+xml")
+
+
+@app.post("/companion-chat")
+async def companion_chat(
+    message: str = Body(..., embed=True),
+    player_class: str = Body("warrior", embed=True),
+    player_name: str = Body("Hero", embed=True),
+    context: str = Body("", embed=True),
+):
+    """
+    Chat with your class companion using Claude AI.
+    Returns a short in-character response.
+    """
+    COMPANION_PERSONAS = {
+        "warrior": ("Bryn the Battle-Hardened", "a grizzled veteran warrior and loyal shield-bearer who respects strength and loyalty"),
+        "mage":    ("Luma the Familiar", "a witty magical familiar spirit bound to the mage, knowledgeable but occasionally sarcastic"),
+        "rogue":   ("Shade", "a mysterious shadow-companion who speaks in riddles, values cunning and gold"),
+        "cleric":  ("Seraph", "a divine spirit-guide who offers wisdom and encouragement, occasionally cryptic"),
+        "ranger":  ("Fang", "a loyal wolf companion who communicates through growls and body language, translated into short direct words"),
+    }
+    name, persona = COMPANION_PERSONAS.get(player_class, COMPANION_PERSONAS["warrior"])
+
+    system_prompt = (
+        f"You are {name}, {persona}. "
+        f"You are the companion of {player_name}, a {player_class}. "
+        "Respond in character with 1-3 short sentences. "
+        "Be helpful, in-world, and match the dark fantasy dungeon RPG tone. "
+        "Never break character or mention being an AI."
+    )
+    user_prompt = message
+    if context:
+        user_prompt = f"[Current situation: {context}]\n{message}"
+
+    try:
+        ai_client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+        response = ai_client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=200,
+            system=system_prompt,
+            messages=[{"role": "user", "content": user_prompt}],
+        )
+        reply = response.content[0].text.strip()
+    except Exception as e:
+        logger.error(f"Companion chat failed: {e}")
+        fallback = {
+            "warrior": "Stay alert. We press on.",
+            "mage": "Interesting question... *adjusts spectacles*",
+            "rogue": "Eyes forward. Ask later.",
+            "cleric": "The light guides us. Have faith.",
+            "ranger": "*Fang sniffs the air and glances at you*",
+        }
+        reply = fallback.get(player_class, "...")
+
+    return {"companion": name, "reply": reply}
 
 
 @app.get("/health")
