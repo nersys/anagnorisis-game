@@ -1,0 +1,83 @@
+# ============================================
+# DDIA CONCEPT: Service Orchestration
+# ============================================
+# Docker Compose manages multiple containers as a single application.
+# 
+# Key concepts:
+# - Services: Individual containers (server, client, db)
+# - Networks: How containers communicate
+# - Volumes: Persistent data storage
+# - Dependencies: Start order (client waits for server)
+# ============================================
+
+version: '3.8'
+
+services:
+  # The Game Server
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    container_name: anagnorisis-server
+    ports:
+      - "8000:8000"  # Expose WebSocket port to host
+    environment:
+      - SERVER_HOST=0.0.0.0
+      - SERVER_PORT=8000
+      - DATABASE_URL=sqlite+aiosqlite:///./data/anagnorisis.db
+      - DEBUG=true
+    env_file:
+      - .env  # Load ANTHROPIC_API_KEY from here
+    volumes:
+      # Persist database outside container
+      - ./data:/app/data
+      # Mount source for hot-reloading during development
+      - ./server:/app/server:ro
+      - ./shared:/app/shared:ro
+    networks:
+      - anagnorisis-net
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # The TUI Client (for development/testing)
+  client:
+    build:
+      context: .
+      dockerfile: Dockerfile.client
+    container_name: anagnorisis-client
+    stdin_open: true   # Keep stdin open for interactive TUI
+    tty: true          # Allocate a pseudo-TTY
+    environment:
+      - SERVER_URL=ws://server:8000/ws
+    depends_on:
+      server:
+        condition: service_healthy
+    volumes:
+      - ./client:/app/client:ro
+      - ./shared:/app/shared:ro
+    networks:
+      - anagnorisis-net
+
+networks:
+  anagnorisis-net:
+    driver: bridge
+
+# ============================================
+# USAGE:
+# 
+# Start the server:
+#   docker-compose up server
+#
+# Run the client (in another terminal):
+#   docker-compose run --rm client
+#
+# Or start everything:
+#   docker-compose up
+#
+# Rebuild after changes:
+#   docker-compose up --build
+# ============================================

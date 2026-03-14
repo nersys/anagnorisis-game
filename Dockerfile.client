@@ -1,0 +1,28 @@
+# Anagnorisis TUI Client
+# Runs the beautiful terminal interface
+
+FROM python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+# Required for Textual TUI to work properly
+ENV TERM=xterm-256color
+
+WORKDIR /app
+
+# Install dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY pyproject.toml .
+RUN pip install --no-cache-dir -e .
+
+COPY . .
+
+# Create non-root user
+RUN useradd --create-home appuser && chown -R appuser:appuser /app
+USER appuser
+
+# The client is interactive, so we use ENTRYPOINT
+ENTRYPOINT ["python", "-m", "client.main"]

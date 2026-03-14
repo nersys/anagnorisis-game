@@ -1,0 +1,58 @@
+# Anagnorisis Game Server
+# Multi-stage build for smaller final image
+
+# ============================================
+# DDIA CONCEPT: Containerization
+# ============================================
+# Why Docker?
+# 1. Reproducibility: Same environment everywhere
+# 2. Isolation: Dependencies don't conflict with system
+# 3. Portability: Run on any machine with Docker
+# 4. Scaling: Easy to spin up multiple instances (future)
+# ============================================
+
+FROM python:3.11-slim as base
+
+# Prevents Python from writing pyc files and buffering stdout/stderr
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+WORKDIR /app
+
+# ---- Dependencies Stage ----
+FROM base as deps
+
+# Install build dependencies (needed for some Python packages)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy only dependency files first (better layer caching)
+COPY pyproject.toml .
+
+# Install dependencies
+RUN pip install --no-cache-dir -e .
+
+# ---- Final Stage ----
+FROM base as final
+
+# Copy installed packages from deps stage
+COPY --from=deps /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+COPY --from=deps /usr/local/bin /usr/local/bin
+
+# Copy application code
+COPY . .
+
+# Create non-root user for security
+RUN useradd --create-home appuser && chown -R appuser:appuser /app
+USER appuser
+
+# Expose the WebSocket port
+EXPOSE 8000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
+
+# Run the server
+CMD ["python", "-m", "server.main"]
