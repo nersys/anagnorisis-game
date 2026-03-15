@@ -450,6 +450,28 @@ function initGame() {
     generateSceneImage(currentRoomData);
   });
   document.getElementById('btn-generate-art').addEventListener('click', generateCustomArt);
+
+  // Map expand/collapse toggle
+  const expandBtn = document.getElementById('btn-expand-map');
+  const mapPanel  = document.getElementById('map-panel');
+  if (expandBtn && mapPanel) {
+    expandBtn.addEventListener('click', () => {
+      const expanded = mapPanel.classList.toggle('map-panel--expanded');
+      expandBtn.textContent = expanded ? '✕' : '⛶';
+      expandBtn.title = expanded ? 'Collapse map' : 'Expand map';
+      // Force Leaflet to recalculate its container size
+      setTimeout(() => { if (laMap && laMap.map) laMap.map.invalidateSize(); }, 50);
+    });
+    // Also collapse on Escape
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape' && mapPanel.classList.contains('map-panel--expanded')) {
+        mapPanel.classList.remove('map-panel--expanded');
+        expandBtn.textContent = '⛶';
+        expandBtn.title = 'Expand map';
+        setTimeout(() => { if (laMap && laMap.map) laMap.map.invalidateSize(); }, 50);
+      }
+    });
+  }
 }
 
 function renderGameUI() {
