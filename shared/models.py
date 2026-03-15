@@ -280,6 +280,13 @@ class Room(BaseModel):
     explored: bool = False
     cleared: bool = False   # True when no living enemies remain
     gold: int = 0
+    # Real-world location data (populated for POI-based dungeons)
+    lat: Optional[float] = None
+    lng: Optional[float] = None
+    osm_id: Optional[str] = None
+    game_role: Optional[str] = None   # tavern, training_hall, mage_tower, etc.
+    distance_m: Optional[int] = None  # metres from player start
+    services: list[str] = Field(default_factory=list)  # heal_full, train_str, etc.
 
 
 class DungeonState(BaseModel):

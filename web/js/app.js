@@ -6,6 +6,11 @@
 import { GameWebSocket } from '/static/js/ws.js';
 import { state, on, applyStateUpdate } from '/static/js/state.js';
 import { LAMap } from '/static/js/la-map.js';
+import {
+  startWatching, stopWatching, setManualPosition, onUpdate,
+  getPosition, isManual, isSimulating, isNearby, distanceTo,
+  enableSimulateTravel, disableSimulateTravel, PROXIMITY_THRESHOLD_M,
+} from '/static/js/gps.js';
 
 // ═══════════════════════════════════════════════════════
 // CONSTANTS
@@ -67,6 +72,9 @@ let selectedClass = 'warrior';
 let selectedMode = 'guided';
 let currentRoomData = null;
 let sceneImageSeed = 1;
+
+// GPS state tracked locally for UI updates
+let _gpsReady = false;   // true once we have any position (GPS or manual)
 
 // ═══════════════════════════════════════════════════════
 // SCREEN ROUTER
@@ -350,13 +358,53 @@ function leaveParty() {
   ws.send('LEAVE_PARTY', {});
 }
 
-function startAdventure() {
+async function startAdventure() {
   const name = document.getElementById('input-adventure-name').value.trim() || 'Into the Depths';
-  ws.send('START_ADVENTURE', {
+  const pos = getPosition();
+
+  if (!pos) {
+    // No GPS — start classic dungeon
+    ws.send('START_ADVENTURE', {
+      adventure_name: name,
+      description: 'A perilous dungeon adventure',
+      mode: selectedMode,
+    });
+    return;
+  }
+
+  // Show loading while we fetch nearby POIs
+  const btn = document.querySelector('#panel-start-adventure button');
+  const origText = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = '🌍 Scanning your world…'; }
+
+  let pois = [];
+  try {
+    const r = await fetch(`/nearby-rooms?lat=${pos.lat}&lng=${pos.lng}&radius=800`);
+    if (r.ok) {
+      const data = await r.json();
+      pois = data.pois || [];
+    }
+  } catch (e) {
+    console.warn('nearby-rooms fetch failed, using classic dungeon', e);
+  }
+
+  if (btn) { btn.disabled = false; btn.textContent = origText; }
+
+  const payload = {
     adventure_name: name,
-    description: 'A perilous dungeon adventure',
+    description: pois.length
+      ? `Dungeon forged from ${pois.length} real locations near you`
+      : 'A perilous dungeon adventure',
     mode: selectedMode,
-  });
+    lat: pos.lat,
+    lng: pos.lng,
+    pois,
+  };
+
+  ws.send('START_ADVENTURE', payload);
+  if (pois.length) {
+    lobbyToast(`🗺️ Built dungeon from ${pois.length} real locations near you!`);
+  }
 }
 
 function lobbyToast(msg) {
@@ -374,8 +422,17 @@ function setupMapCanvas() {
   if (!laMap) {
     laMap = new LAMap('la-map');
     laMap.init();
+    // Wire GPS updates → map dot
+    onUpdate(({ position }) => {
+      if (position && laMap) laMap.updatePlayerPosition(position.lat, position.lng);
+      renderGPSIndicator();
+      renderActionBar(); // refresh proximity states on move buttons
+    });
   }
   if (state.dungeon) laMap.render(state.dungeon);
+  // Immediately show current GPS dot if available
+  const pos = getPosition();
+  if (pos && laMap) laMap.updatePlayerPosition(pos.lat, pos.lng);
 }
 
 function initGame() {
@@ -544,12 +601,20 @@ function renderDirectionButtons(container, append) {
   const currentRoom = dungeon && dungeon.current_room_id ? dungeon.rooms[dungeon.current_room_id] : null;
   const exits = currentRoom ? (currentRoom.exits || {}) : {};
 
-  const dirs = [
-    { key: 'north', icon: '↑', label: 'N' },
-    { key: 'south', icon: '↓', label: 'S' },
-    { key: 'west',  icon: '←', label: 'W' },
-    { key: 'east',  icon: '→', label: 'E' },
-  ];
+  // Detect whether this is a POI dungeon (uses forward/back) or classic (N/S/E/W)
+  const isPOI = 'forward' in exits || 'back' in exits;
+
+  const dirs = isPOI
+    ? [
+        { key: 'back',    icon: '←', label: 'Back'    },
+        { key: 'forward', icon: '→', label: 'Forward'  },
+      ]
+    : [
+        { key: 'north', icon: '↑', label: 'N' },
+        { key: 'south', icon: '↓', label: 'S' },
+        { key: 'west',  icon: '←', label: 'W' },
+        { key: 'east',  icon: '→', label: 'E' },
+      ];
 
   const group = append ? document.createElement('div') : container;
   if (append) {
@@ -558,14 +623,64 @@ function renderDirectionButtons(container, append) {
   }
 
   dirs.forEach(d => {
+    const targetRoomId = exits[d.key];
+    if (!targetRoomId && !isPOI) {
+      // Classic mode: always show all 4 buttons, disabled if no exit
+      const btn = document.createElement('button');
+      btn.className = 'dir-btn';
+      btn.title = d.key.charAt(0).toUpperCase() + d.key.slice(1);
+      btn.innerHTML = d.icon;
+      btn.disabled = true;
+      group.appendChild(btn);
+      return;
+    }
+    if (!targetRoomId) return; // POI mode: skip missing directions
+
+    const targetRoom = dungeon.rooms[targetRoomId];
+    const targetLat = targetRoom?.lat;
+    const targetLng = targetRoom?.lng;
+    const nearby = isNearby(targetLat, targetLng);
+    const dist = distanceTo(targetLat, targetLng);
+
     const btn = document.createElement('button');
-    btn.className = 'dir-btn';
-    btn.title = d.key.charAt(0).toUpperCase() + d.key.slice(1);
-    btn.innerHTML = d.icon;
-    btn.disabled = !exits[d.key];
-    btn.addEventListener('click', () => ws.send('MOVE', { direction: d.key }));
+    btn.className = `dir-btn${!nearby ? ' dir-btn--far' : ''}`;
+    btn.title = nearby
+      ? `Go ${d.label}`
+      : `Walk to ${targetRoom?.name || d.label} (${dist}m away)`;
+
+    // Show distance badge when player needs to physically travel
+    const distBadge = (!nearby && dist != null)
+      ? `<span class="dir-btn__dist">${dist}m</span>`
+      : '';
+    btn.innerHTML = `${d.icon}${distBadge}`;
+
+    if (!nearby) {
+      btn.addEventListener('click', () => {
+        const roomName = targetRoom?.name || 'that location';
+        addLog(
+          `📍 You need to walk to <strong>${roomName}</strong> (${dist}m away) to enter it.` +
+          (isSimulating() ? '' : ' Or enable <em>Simulate Travel</em> to skip movement.'),
+          'system'
+        );
+      });
+    } else {
+      btn.addEventListener('click', () => ws.send('MOVE', { direction: d.key }));
+    }
     group.appendChild(btn);
   });
+
+  // Simulate Travel toggle (only in POI mode with GPS active)
+  if (isPOI && getPosition()) {
+    const simBtn = document.createElement('button');
+    simBtn.className = `dir-btn dir-btn--sim${isSimulating() ? ' active' : ''}`;
+    simBtn.title = isSimulating() ? 'Disable simulate travel' : 'Simulate travel (skip walking)';
+    simBtn.textContent = isSimulating() ? '🚀' : '🗺️';
+    simBtn.addEventListener('click', () => {
+      if (isSimulating()) disableSimulateTravel(); else enableSimulateTravel();
+      renderActionBar();
+    });
+    group.appendChild(simBtn);
+  }
 }
 
 function renderEnemies() {
@@ -1061,7 +1176,13 @@ function setupHandlers() {
         }
       }
       if (payload.narrative) addLog(payload.narrative, 'narrative');
-      addLog(`🗡️ The adventure begins! Use the arrow buttons to explore.`, 'system');
+      // Check if this is a real-world dungeon (rooms have lat/lng)
+      const hasRealRooms = payload.dungeon && Object.values(payload.dungeon.rooms || {}).some(r => r.lat != null);
+      if (hasRealRooms) {
+        addLog(`🌍 <strong>Real-world dungeon active!</strong> The places around you are now the dungeon. Walk to them to enter — or use 🗺️ to simulate travel.`, 'system');
+      } else {
+        addLog(`🗡️ The adventure begins! Use the arrow buttons to explore.`, 'system');
+      }
     } else if (event === 'player_joined') {
       addLog(`👤 ${data.player_name || 'A hero'} joined the party!`, 'system');
     } else if (event === 'player_left') {
@@ -1124,6 +1245,89 @@ function formatName(str) {
 }
 
 // ═══════════════════════════════════════════════════════
+// GPS INIT & INDICATOR
+// ═══════════════════════════════════════════════════════
+
+async function initGPS() {
+  try {
+    await startWatching();
+    _gpsReady = true;
+    renderGPSIndicator();
+    // Show GPS indicator in lobby so player knows location is active
+    const lobbyMsg = document.getElementById('lobby-message');
+    if (lobbyMsg) {
+      lobbyMsg.textContent = '📍 GPS active — your dungeon will be built from real places near you!';
+      lobbyMsg.classList.remove('hidden');
+      setTimeout(() => lobbyMsg.classList.add('hidden'), 5000);
+    }
+  } catch (err) {
+    // GPS unavailable or denied — show manual entry option
+    _gpsReady = false;
+    renderGPSIndicator();
+    _showManualLocationPrompt(err);
+  }
+}
+
+function _showManualLocationPrompt(err) {
+  // Show a subtle manual-entry bar if GPS fails
+  const existing = document.getElementById('manual-location-bar');
+  if (existing) return;
+
+  const bar = document.createElement('div');
+  bar.id = 'manual-location-bar';
+  bar.style.cssText = `
+    position:fixed; bottom:0; left:0; right:0; z-index:9000;
+    background:#1a1a2e; border-top:1px solid #c9a84c33;
+    padding:10px 16px; display:flex; gap:8px; align-items:center;
+    font-family:'Roboto Mono',monospace; font-size:12px;
+  `;
+  bar.innerHTML = `
+    <span style="color:#c9a84c">📍 GPS unavailable.</span>
+    <span style="color:#888">Enter coordinates to use real-world mode:</span>
+    <input id="input-manual-lat" placeholder="Latitude" style="width:100px;background:#0d0d1a;color:#e0e0e0;border:1px solid #333;padding:4px 6px;border-radius:4px;font-family:inherit;font-size:11px">
+    <input id="input-manual-lng" placeholder="Longitude" style="width:100px;background:#0d0d1a;color:#e0e0e0;border:1px solid #333;padding:4px 6px;border-radius:4px;font-family:inherit;font-size:11px">
+    <button id="btn-set-location" style="background:#c9a84c;color:#000;border:none;padding:4px 10px;border-radius:4px;font-family:inherit;font-size:11px;cursor:pointer">Set</button>
+    <button id="btn-dismiss-location" style="background:transparent;color:#555;border:none;padding:4px 8px;cursor:pointer;font-size:14px">✕</button>
+  `;
+  document.body.appendChild(bar);
+
+  document.getElementById('btn-set-location').addEventListener('click', () => {
+    const lat = parseFloat(document.getElementById('input-manual-lat').value);
+    const lng = parseFloat(document.getElementById('input-manual-lng').value);
+    if (!isNaN(lat) && !isNaN(lng)) {
+      setManualPosition(lat, lng);
+      _gpsReady = true;
+      renderGPSIndicator();
+      bar.remove();
+    }
+  });
+  document.getElementById('btn-dismiss-location').addEventListener('click', () => bar.remove());
+}
+
+function renderGPSIndicator() {
+  const el = document.getElementById('gps-indicator');
+  if (!el) return;
+  const pos = getPosition();
+  if (!pos) {
+    el.textContent = '📡 No GPS';
+    el.style.color = '#555';
+    el.title = 'Location unavailable — classic dungeon mode';
+  } else if (isSimulating()) {
+    el.textContent = '🚀 Simulating';
+    el.style.color = '#f0cc6a';
+    el.title = 'Simulate travel mode: proximity gates disabled';
+  } else if (isManual()) {
+    el.textContent = `🖥 Manual: ${pos.lat.toFixed(4)},${pos.lng.toFixed(4)}`;
+    el.style.color = '#4fc3f7';
+    el.title = 'Manual location — real-world dungeon active';
+  } else {
+    el.textContent = `📍 GPS ±${Math.round(pos.accuracy)}m`;
+    el.style.color = '#43a047';
+    el.title = `Real GPS active: ${pos.lat.toFixed(5)},${pos.lng.toFixed(5)}`;
+  }
+}
+
+// ═══════════════════════════════════════════════════════
 // BOOT
 // ═══════════════════════════════════════════════════════
 
@@ -1133,6 +1337,8 @@ function boot() {
   initLobby();
   initGame();
   showScreen('login');
+  // Start GPS as early as possible (may trigger browser permission prompt)
+  initGPS();
 }
 
 document.addEventListener('DOMContentLoaded', boot);

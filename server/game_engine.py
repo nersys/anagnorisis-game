@@ -52,7 +52,7 @@ from shared.constants import (
 )
 from server.connection_manager import ConnectionManager
 from server.ai_dungeon_master import AIDungeonMaster
-from server.dungeon_generator import generate_dungeon
+from server.dungeon_generator import generate_dungeon, generate_dungeon_from_pois
 
 logger = logging.getLogger("anagnorisis.engine")
 
@@ -531,8 +531,19 @@ class GameEngine:
         logger.info(f"Adventure '{adventure.name}' started for party {party.name}")
 
         # Generate dungeon for each party member
+        # If the player sent GPS coords + pre-fetched POIs, build a real-world dungeon
+        player_lat = payload.get("lat")
+        player_lng = payload.get("lng")
+        pois = payload.get("pois", [])
+
         for pid in party.member_ids:
-            rooms = generate_dungeon()
+            if player_lat is not None and player_lng is not None and pois:
+                rooms = generate_dungeon_from_pois(pois, player_lat, player_lng)
+                logger.info(f"🌍 Real-world dungeon generated ({len(rooms)} rooms) for {pid}")
+            else:
+                rooms = generate_dungeon()
+                logger.info(f"🏰 Classic dungeon generated for {pid}")
+
             dungeon = DungeonState(
                 rooms={rid: r for rid, r in rooms.items()},
                 current_room_id="r0",
@@ -680,7 +691,7 @@ class GameEngine:
             return GameMessage(type=MessageType.ERROR, payload={"error": "No active dungeon"})
 
         direction = message.payload.get("direction", "").lower()
-        if direction not in ("north", "south", "east", "west"):
+        if direction not in ("north", "south", "east", "west", "forward", "back"):
             return GameMessage(type=MessageType.ERROR, payload={"error": f"Invalid direction: {direction}"})
 
         current_room = dungeon.rooms.get(dungeon.current_room_id)
