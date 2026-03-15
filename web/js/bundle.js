@@ -1468,7 +1468,7 @@ function addLog(text, kind = 'narrative') {
 }
 
 // ═══════════════════════════════════════════════════════
-// SCENE IMAGE GENERATION (Pollinations.ai)
+// SCENE IMAGE GENERATION (DALL-E 3 via server)
 // ═══════════════════════════════════════════════════════
 
 function generateSceneImage(room) {
@@ -1527,22 +1527,14 @@ function generateSceneImage(room) {
     tempImg.src = url;
   }
 
-  // Try DALL-E 3 via server first (works if OPENAI_API_KEY is set)
+  // DALL-E 3 via server (/scene-art returns {url} JSON)
   fetch(`/scene-art?prompt=${encodeURIComponent(prompt)}`)
-    .then(r => r.ok ? r.json().catch(() => null) : null)
+    .then(r => r.ok ? r.json() : Promise.reject('no key'))
     .then(data => {
-      if (data && data.url) {
-        loadImageUrl(data.url);
-      } else {
-        // Fall back to Pollinations.ai (free, no key needed)
-        const polUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1200&height=400&seed=${seed}&nologo=true&enhance=true`;
-        loadImageUrl(polUrl);
-      }
+      if (data && data.url) loadImageUrl(data.url);
+      else showFallback();
     })
-    .catch(() => {
-      const polUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1200&height=400&seed=${seed}&nologo=true&enhance=true`;
-      loadImageUrl(polUrl);
-    });
+    .catch(() => showFallback());
 }
 
 function roomGradient(type) {
