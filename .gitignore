@@ -1,6 +1,7 @@
 # Environment and secrets
 .env
 LOCAL_SETUP.md
+PRIVATE_README.md
 
 # Python
 __pycache__/
