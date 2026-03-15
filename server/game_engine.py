@@ -675,7 +675,7 @@ class GameEngine:
                 type=MessageType.DM_RESPONSE,
                 payload={"player_name": player.name, "action": action_text, "narrative": setup},
             ))
-            await manager.send_to_connection(connection_id, GameMessage(
+            await manager.send_to(connection_id, GameMessage(
                 type=MessageType.DICE_ROLL_REQUIRED,
                 payload={
                     "die": roll_req["die"],
