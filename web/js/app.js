@@ -7,9 +7,10 @@ import { GameWebSocket } from '/static/js/ws.js';
 import { state, on, applyStateUpdate } from '/static/js/state.js';
 import { LAMap } from '/static/js/la-map.js';
 import {
-  startWatching, stopWatching, setManualPosition, onUpdate,
-  getPosition, isManual, isSimulating, isNearby, distanceTo,
+  startWatching, setManualPosition, onUpdate,
+  getPosition, isManual, isSimulating, isGPSActive, isNearby, distanceTo,
   enableSimulateTravel, disableSimulateTravel, PROXIMITY_THRESHOLD_M,
+  getIPGeolocation,
 } from '/static/js/gps.js';
 
 // ═══════════════════════════════════════════════════════
@@ -259,6 +260,8 @@ function initLobby() {
     document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
   });
+
+  initLocationWidget();
 }
 
 function renderLobbyPlayer() {
@@ -373,9 +376,9 @@ async function startAdventure() {
   }
 
   // Show loading while we fetch nearby POIs
-  const btn = document.querySelector('#panel-start-adventure button');
-  const origText = btn ? btn.textContent : '';
-  if (btn) { btn.disabled = true; btn.textContent = '🌍 Scanning your world…'; }
+  const btn = document.getElementById('btn-start-adventure');
+  const origHTML = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span>🌍 Scanning your world…</span>'; }
 
   let pois = [];
   try {
@@ -388,7 +391,7 @@ async function startAdventure() {
     console.warn('nearby-rooms fetch failed, using classic dungeon', e);
   }
 
-  if (btn) { btn.disabled = false; btn.textContent = origText; }
+  if (btn) { btn.disabled = false; btn.innerHTML = origHTML; }
 
   const payload = {
     adventure_name: name,
@@ -1248,60 +1251,105 @@ function formatName(str) {
 // GPS INIT & INDICATOR
 // ═══════════════════════════════════════════════════════
 
+// Geocode a place name → { lat, lng } using Nominatim (OpenStreetMap, free)
+async function geocodePlace(query) {
+  const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(query)}`;
+  const r = await fetch(url, { headers: { 'User-Agent': 'Anagnorisis-Game/1.0' } });
+  if (!r.ok) return null;
+  const results = await r.json();
+  if (!results.length) return null;
+  return { lat: parseFloat(results[0].lat), lng: parseFloat(results[0].lon), city: results[0].display_name.split(',')[0] };
+}
+
 async function initGPS() {
+  // 1. Try real GPS first (mobile / laptop with GPS chip)
   try {
     await startWatching();
     _gpsReady = true;
     renderGPSIndicator();
-    // Show GPS indicator in lobby so player knows location is active
-    const lobbyMsg = document.getElementById('lobby-message');
-    if (lobbyMsg) {
-      lobbyMsg.textContent = '📍 GPS active — your dungeon will be built from real places near you!';
-      lobbyMsg.classList.remove('hidden');
-      setTimeout(() => lobbyMsg.classList.add('hidden'), 5000);
-    }
-  } catch (err) {
-    // GPS unavailable or denied — show manual entry option
-    _gpsReady = false;
+    updateLocationWidget(`📍 GPS active`, 'GPS');
+    return;
+  } catch {
+    // GPS not available or denied — fall through to IP
+  }
+
+  // 2. IP geolocation — silent, works on any desktop, no permission
+  const ip = await getIPGeolocation();
+  if (ip) {
+    setManualPosition(ip.lat, ip.lng);
+    enableSimulateTravel(); // desktop: no proximity gate by default
+    _gpsReady = true;
     renderGPSIndicator();
-    _showManualLocationPrompt(err);
+    updateLocationWidget(`${ip.city || 'Detected location'} (${ip.lat.toFixed(3)}, ${ip.lng.toFixed(3)})`, 'IP');
+    return;
+  }
+
+  // 3. Nothing worked — prompt user to type a location
+  _gpsReady = false;
+  renderGPSIndicator();
+  updateLocationWidget('Could not detect location — please set it manually', '');
+}
+
+function updateLocationWidget(statusText, source) {
+  const statusEl = document.getElementById('location-status');
+  const sourceEl = document.getElementById('location-source');
+  if (statusEl) statusEl.textContent = statusText;
+  if (sourceEl) {
+    const labels = { GPS: '(live GPS)', IP: '(from IP — approximate)', manual: '(set manually)' };
+    sourceEl.textContent = labels[source] || '';
   }
 }
 
-function _showManualLocationPrompt(err) {
-  // Show a subtle manual-entry bar if GPS fails
-  const existing = document.getElementById('manual-location-bar');
-  if (existing) return;
+function initLocationWidget() {
+  const editPanel = document.getElementById('location-edit');
+  const changeBtn = document.getElementById('btn-change-location');
+  const setBtn    = document.getElementById('btn-location-set');
+  const cancelBtn = document.getElementById('btn-location-cancel');
+  const input     = document.getElementById('input-location-text');
+  if (!editPanel || !changeBtn) return;
 
-  const bar = document.createElement('div');
-  bar.id = 'manual-location-bar';
-  bar.style.cssText = `
-    position:fixed; bottom:0; left:0; right:0; z-index:9000;
-    background:#1a1a2e; border-top:1px solid #c9a84c33;
-    padding:10px 16px; display:flex; gap:8px; align-items:center;
-    font-family:'Roboto Mono',monospace; font-size:12px;
-  `;
-  bar.innerHTML = `
-    <span style="color:#c9a84c">📍 GPS unavailable.</span>
-    <span style="color:#888">Enter coordinates to use real-world mode:</span>
-    <input id="input-manual-lat" placeholder="Latitude" style="width:100px;background:#0d0d1a;color:#e0e0e0;border:1px solid #333;padding:4px 6px;border-radius:4px;font-family:inherit;font-size:11px">
-    <input id="input-manual-lng" placeholder="Longitude" style="width:100px;background:#0d0d1a;color:#e0e0e0;border:1px solid #333;padding:4px 6px;border-radius:4px;font-family:inherit;font-size:11px">
-    <button id="btn-set-location" style="background:#c9a84c;color:#000;border:none;padding:4px 10px;border-radius:4px;font-family:inherit;font-size:11px;cursor:pointer">Set</button>
-    <button id="btn-dismiss-location" style="background:transparent;color:#555;border:none;padding:4px 8px;cursor:pointer;font-size:14px">✕</button>
-  `;
-  document.body.appendChild(bar);
+  changeBtn.addEventListener('click', () => {
+    editPanel.classList.remove('hidden');
+    input.focus();
+  });
+  cancelBtn.addEventListener('click', () => editPanel.classList.add('hidden'));
 
-  document.getElementById('btn-set-location').addEventListener('click', () => {
-    const lat = parseFloat(document.getElementById('input-manual-lat').value);
-    const lng = parseFloat(document.getElementById('input-manual-lng').value);
-    if (!isNaN(lat) && !isNaN(lng)) {
-      setManualPosition(lat, lng);
+  setBtn.addEventListener('click', async () => {
+    const raw = input.value.trim();
+    if (!raw) return;
+    setBtn.textContent = '…';
+    setBtn.disabled = true;
+
+    // Try lat,lng first (e.g. "34.05,-118.24")
+    const parts = raw.split(',').map(s => parseFloat(s.trim()));
+    if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+      setManualPosition(parts[0], parts[1]);
+      enableSimulateTravel();
       _gpsReady = true;
       renderGPSIndicator();
-      bar.remove();
+      updateLocationWidget(`${parts[0].toFixed(4)}, ${parts[1].toFixed(4)}`, 'manual');
+      editPanel.classList.add('hidden');
+    } else {
+      // Geocode the place name
+      const result = await geocodePlace(raw);
+      if (result) {
+        setManualPosition(result.lat, result.lng);
+        enableSimulateTravel();
+        _gpsReady = true;
+        renderGPSIndicator();
+        updateLocationWidget(`${result.city || raw} (${result.lat.toFixed(3)}, ${result.lng.toFixed(3)})`, 'manual');
+        editPanel.classList.add('hidden');
+      } else {
+        updateLocationWidget(`❌ Could not find "${raw}" — try a different name`, '');
+      }
     }
+
+    setBtn.textContent = 'Set';
+    setBtn.disabled = false;
+    input.value = '';
   });
-  document.getElementById('btn-dismiss-location').addEventListener('click', () => bar.remove());
+
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') setBtn.click(); });
 }
 
 function renderGPSIndicator() {
@@ -1309,21 +1357,21 @@ function renderGPSIndicator() {
   if (!el) return;
   const pos = getPosition();
   if (!pos) {
-    el.textContent = '📡 No GPS';
-    el.style.color = '#555';
-    el.title = 'Location unavailable — classic dungeon mode';
-  } else if (isSimulating()) {
-    el.textContent = '🚀 Simulating';
-    el.style.color = '#f0cc6a';
-    el.title = 'Simulate travel mode: proximity gates disabled';
-  } else if (isManual()) {
-    el.textContent = `🖥 Manual: ${pos.lat.toFixed(4)},${pos.lng.toFixed(4)}`;
-    el.style.color = '#4fc3f7';
-    el.title = 'Manual location — real-world dungeon active';
-  } else {
+    el.textContent = '📡 No location';
+    el.style.color = '#e53935';
+    el.title = 'No location set — will use classic dungeon';
+  } else if (isGPSActive()) {
     el.textContent = `📍 GPS ±${Math.round(pos.accuracy)}m`;
     el.style.color = '#43a047';
-    el.title = `Real GPS active: ${pos.lat.toFixed(5)},${pos.lng.toFixed(5)}`;
+    el.title = `Live GPS: ${pos.lat.toFixed(5)}, ${pos.lng.toFixed(5)}`;
+  } else if (isSimulating()) {
+    el.textContent = `🌍 ${pos.lat.toFixed(3)}, ${pos.lng.toFixed(3)}`;
+    el.style.color = '#4fc3f7';
+    el.title = 'Real-world dungeon active (desktop mode)';
+  } else {
+    el.textContent = `📍 ${pos.lat.toFixed(3)}, ${pos.lng.toFixed(3)}`;
+    el.style.color = '#4fc3f7';
+    el.title = `Location set: ${pos.lat.toFixed(5)}, ${pos.lng.toFixed(5)}`;
   }
 }
 
@@ -1337,7 +1385,7 @@ function boot() {
   initLobby();
   initGame();
   showScreen('login');
-  // Start GPS as early as possible (may trigger browser permission prompt)
+  // Detect location immediately on load — IP geolocation works silently on desktop
   initGPS();
 }
 
