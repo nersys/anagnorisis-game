@@ -668,6 +668,7 @@ function showScreen(name) {
     setTimeout(() => {
       setupMapCanvas();
       renderGameUI();
+      initGameParticles();
     }, 50);
   }
 }
@@ -990,6 +991,65 @@ function lobbyToast(msg) {
 // GAME SCREEN
 // ═══════════════════════════════════════════════════════
 
+// ── Floating ember particle system for the game background ──
+let _particleLoop = null;
+function initGameParticles() {
+  const canvas = document.getElementById('game-particles');
+  if (!canvas) return;
+  if (_particleLoop) return; // already running
+
+  const ctx = canvas.getContext('2d');
+  const resize = () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; };
+  resize();
+  window.addEventListener('resize', resize);
+
+  // Particle pool — embers + rune wisps
+  const PALETTE = [
+    'rgba(201,168,76,',   // gold
+    'rgba(200,112,64,',   // ember
+    'rgba(144,96,224,',   // purple wisp
+    'rgba(229,57,53,',    // red spark
+  ];
+  const N = 40;
+  const particles = Array.from({ length: N }, () => spawnParticle(canvas));
+
+  function spawnParticle(c) {
+    return {
+      x: Math.random() * c.width,
+      y: c.height + Math.random() * 40,
+      vx: (Math.random() - 0.5) * 0.4,
+      vy: -(0.3 + Math.random() * 0.6),
+      r: 0.8 + Math.random() * 2.2,
+      alpha: 0.15 + Math.random() * 0.35,
+      life: 0,
+      maxLife: 180 + Math.random() * 240,
+      color: PALETTE[Math.floor(Math.random() * PALETTE.length)],
+      drift: (Math.random() - 0.5) * 0.008,
+    };
+  }
+
+  function tick() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    for (let i = 0; i < particles.length; i++) {
+      const p = particles[i];
+      p.life++;
+      p.x += p.vx + Math.sin(p.life * p.drift) * 0.3;
+      p.y += p.vy;
+      const progress = p.life / p.maxLife;
+      const fade = progress < 0.15 ? progress / 0.15 : 1 - (progress - 0.15) / 0.85;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fillStyle = p.color + (p.alpha * fade) + ')';
+      ctx.fill();
+      if (p.life >= p.maxLife || p.y < -10) {
+        particles[i] = spawnParticle(canvas);
+      }
+    }
+    _particleLoop = requestAnimationFrame(tick);
+  }
+  tick();
+}
+
 function setupMapCanvas() {
   if (!laMap) {
     laMap = new LAMap('la-map');
@@ -1277,9 +1337,70 @@ function renderPhaseBanner() {
   document.getElementById('game-time').textContent = `Day ${state.gameDay} · ${String(state.gameHour).padStart(2,'0')}:00`;
 }
 
+// ── Explore Toolbar: always-visible quick-actions when not in combat ──
+function renderExploreToolbar() {
+  const toolbar = document.getElementById('explore-toolbar');
+  if (!toolbar) return;
+  const phase = state.phase || 'exploring';
+  const inCombat = phase === 'combat';
+  toolbar.style.display = inCombat ? 'none' : '';
+  if (inCombat) return;
+
+  const p = state.player;
+  const hpPct = p ? ps(p).health / ps(p).max_health : 1;
+  const canRest = hpPct < 0.99 && phase === 'exploring';
+
+  // Class-specific flavour button
+  const cls = p ? p.player_class : 'warrior';
+  const prayClasses = ['cleric', 'paladin', 'druid'];
+  const meditateClasses = ['mage', 'wizard', 'warlock', 'sorcerer'];
+  let flairBtn = '';
+  if (prayClasses.some(c => cls && cls.toLowerCase().includes(c))) {
+    flairBtn = `<button class="btn-pray" id="btn-pray" title="Channel divine power">🙏 Pray</button>`;
+  } else if (meditateClasses.some(c => cls && cls.toLowerCase().includes(c))) {
+    flairBtn = `<button class="btn-introspect" id="btn-meditate" title="Meditate to restore mana" style="border-color:rgba(144,96,224,0.4)">🧘 Meditate</button>`;
+  }
+
+  toolbar.innerHTML = `
+    <span class="explore-toolbar-label">✦</span>
+    <button class="btn-introspect" id="btn-introspect" title="Reflect on your journey and inner state">🔮 Introspect</button>
+    <button class="btn-examine"    id="btn-examine"    title="Search the room for secrets">🔍 Examine</button>
+    ${canRest ? `<button class="btn-rest" id="btn-rest" title="Take a brief rest to recover">🌿 Rest</button>` : ''}
+    ${flairBtn}
+  `;
+
+  document.getElementById('btn-introspect')?.addEventListener('click', () => {
+    const loc = state.dungeon?.rooms?.[state.dungeon?.current_room_id]?.name || 'this place';
+    sendPlayerInput(`*I pause and look inward — taking stock of my wounds, my spirit, the weight of ${loc}, and all I have witnessed on this journey...*`);
+    addLog('🔮 You drift into quiet reflection...', 'introspect');
+  });
+
+  document.getElementById('btn-examine')?.addEventListener('click', () => {
+    const room = state.dungeon?.rooms?.[state.dungeon?.current_room_id];
+    const loc = room?.name || 'the room';
+    sendPlayerInput(`*I carefully examine ${loc}, running my hands along the walls, checking for hidden doors, inscriptions, or anything of note*`);
+  });
+
+  document.getElementById('btn-rest')?.addEventListener('click', () => {
+    sendPlayerInput(`*I find a quiet corner and take a brief rest, letting my body recover before pressing on*`);
+    addLog('🌿 You take a moment to rest...', 'system');
+  });
+
+  document.getElementById('btn-pray')?.addEventListener('click', () => {
+    sendPlayerInput(`*I kneel and offer a prayer, drawing on divine power to guide and protect me*`);
+    addLog('🙏 You bow your head in prayer...', 'introspect');
+  });
+
+  document.getElementById('btn-meditate')?.addEventListener('click', () => {
+    sendPlayerInput(`*I sit in quiet meditation, breathing slowly, letting arcane energy flow back into my mind*`);
+    addLog('🧘 You enter a meditative state...', 'introspect');
+  });
+}
+
 function renderActionBar() {
   const bar = document.getElementById('action-bar');
   const phase = state.phase || 'exploring';
+  renderExploreToolbar();
 
   if (phase === 'victory' || phase === 'game_over') {
     bar.innerHTML = `
@@ -1386,19 +1507,20 @@ function renderDirectionButtons(container, append) {
 
   const dirs = isPOI
     ? [
-        { key: 'back',    icon: '←', label: 'Back'    },
-        { key: 'forward', icon: '→', label: 'Forward'  },
+        { key: 'back',    icon: '⟵', label: 'Back'    },
+        { key: 'forward', icon: '⟶', label: 'Forward'  },
       ]
     : [
         { key: 'north', icon: '↑', label: 'N' },
-        { key: 'south', icon: '↓', label: 'S' },
         { key: 'west',  icon: '←', label: 'W' },
         { key: 'east',  icon: '→', label: 'E' },
+        { key: 'south', icon: '↓', label: 'S' },
       ];
 
   const group = append ? document.createElement('div') : container;
+  // Extra gap in POI mode so Back / Forward are clearly separated
+  group.className = isPOI ? 'action-group action-group--poi' : 'action-group';
   if (append) {
-    group.className = 'action-group';
     container.appendChild(group);
   }
 
@@ -1406,7 +1528,7 @@ function renderDirectionButtons(container, append) {
     const btn = document.createElement('button');
     btn.className = 'dir-btn';
     btn.title = d.label;
-    btn.innerHTML = `${d.icon} <span style="font-size:10px">${d.label}</span>`;
+    btn.innerHTML = `<span style="font-size:20px;line-height:1">${d.icon}</span><span>${d.label}</span>`;
     btn.disabled = !exits[d.key];
     btn.addEventListener('click', () => ws.send('MOVE', { direction: d.key }));
     group.appendChild(btn);

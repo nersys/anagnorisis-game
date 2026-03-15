@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Cinzel+Decorative:wght@400;700&family=Roboto+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <link rel="stylesheet" href="/static/app.css?v=5" />
+  <link rel="stylesheet" href="/static/app.css?v=6" />
 </head>
 <body>
   <div id="app">
@@ -168,6 +168,8 @@
     <!-- GAME SCREEN                             -->
     <!-- ═══════════════════════════════════════ -->
     <div id="screen-game" class="screen">
+      <!-- Floating ember particles (behind layout) -->
+      <canvas id="game-particles" class="game-particles-canvas"></canvas>
       <div class="game-layout">
 
         <!-- ─── LEFT PANEL ─── -->
@@ -242,6 +244,11 @@
             <div id="narrative-log" class="narrative-log">
               <!-- Populated by JS -->
             </div>
+          </div>
+
+          <!-- Explore Toolbar — persistent quick-actions when not in combat -->
+          <div class="explore-toolbar" id="explore-toolbar">
+            <!-- Populated by JS (hidden during combat) -->
           </div>
 
           <!-- Action Bar -->
@@ -389,6 +396,6 @@
   </div><!-- end #app -->
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="/static/js/bundle.js?v=18"></script>
+  <script src="/static/js/bundle.js?v=19"></script>
 </body>
 </html>
