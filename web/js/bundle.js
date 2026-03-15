@@ -602,34 +602,56 @@ function _pickNarratorVoice() {
   return _narratorVoice;
 }
 
-function narratorSpeak(text) {
-  if (!narratorEnabled || !('speechSynthesis' in window)) return;
-  // Strip markdown, dice tags, emoji, and excess whitespace
-  const clean = text
+// Current narrator audio element (so we can stop it on new speech)
+let _narratorAudio = null;
+
+function _cleanForSpeech(text) {
+  return text
     .replace(/\[\[ROLL:[^\]]+\]\]/g, '')
-    .replace(/[🎲✅❌💥💀⚀⚁⚂⚃⚄⚅🔊🔇🎨📜🍺⚔️🌟]/gu, '')
+    .replace(/[\u{1F000}-\u{1FFFF}]/gu, '')
     .replace(/\*{1,2}([^*]+)\*{1,2}/g, '$1')
     .replace(/#+\s/g, '')
+    .replace(/\[([^\]]+)\]/g, '$1')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+function _speakFallback(clean) {
+  // Web Speech API fallback — robotic but works without API key
+  if (!('speechSynthesis' in window)) return;
+  const voices = speechSynthesis.getVoices();
+  speechSynthesis.cancel();
+  const utter = new SpeechSynthesisUtterance(clean);
+  utter.rate = 0.88; utter.pitch = 0.85; utter.volume = 1.0;
+  const voice = voices.find(v => /en-GB/i.test(v.lang) && /male/i.test(v.name))
+    || voices.find(v => /en/i.test(v.lang) && /male/i.test(v.name))
+    || voices.find(v => /en/i.test(v.lang));
+  if (voice) utter.voice = voice;
+  speechSynthesis.speak(utter);
+}
+
+async function narratorSpeak(text) {
+  if (!narratorEnabled) return;
+  const clean = _cleanForSpeech(text);
   if (!clean) return;
 
-  speechSynthesis.cancel(); // Stop any current speech before starting new
-  const utter = new SpeechSynthesisUtterance(clean);
-  utter.rate = 0.88;      // Slightly slower = more dramatic
-  utter.pitch = 0.85;     // Slightly lower pitch = more gravitas
-  utter.volume = 1.0;
+  // Stop any currently playing narration
+  if (_narratorAudio) { _narratorAudio.pause(); _narratorAudio = null; }
+  if ('speechSynthesis' in window) speechSynthesis.cancel();
 
-  // Voices may not be loaded yet on first call
-  const voice = _pickNarratorVoice();
-  if (voice) utter.voice = voice;
-  else speechSynthesis.onvoiceschanged = () => {
-    _narratorVoice = null;
-    const v = _pickNarratorVoice();
-    if (v) utter.voice = v;
-  };
-
-  speechSynthesis.speak(utter);
+  try {
+    const res = await fetch(`/tts?text=${encodeURIComponent(clean)}`);
+    if (!res.ok) throw new Error('no tts');
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+    _narratorAudio = audio;
+    audio.onended = () => URL.revokeObjectURL(url);
+    await audio.play();
+  } catch {
+    // Fall back to browser TTS
+    _speakFallback(clean);
+  }
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1000,7 +1022,10 @@ function initGame() {
     const btn = document.getElementById('btn-narrator');
     btn.textContent = narratorEnabled ? '🔊' : '🔇';
     btn.title = narratorEnabled ? 'Narrator ON — click to mute' : 'Narrator OFF — click to enable';
-    if (!narratorEnabled) speechSynthesis.cancel();
+    if (!narratorEnabled) {
+      if (_narratorAudio) { _narratorAudio.pause(); _narratorAudio = null; }
+      if ('speechSynthesis' in window) speechSynthesis.cancel();
+    }
   });
 
   // ── Map expand ──
@@ -1748,15 +1773,25 @@ async function showLocationHistory() {
 // ═══════════════════════════════════════════════════════
 
 async function showTaverns() {
+  // Use real GPS position first; fall back to room map position
+  const gps = getPosition();
   const room = currentRoomData;
-  const locationName = (laMap && laMap.getRoomName(room && room.id)) || (room && room.name) || 'your location';
-  const lat = (laMap && room && laMap.roomLocations[room.id]) ? laMap.roomLocations[room.id][0] : 34.0522;
-  const lng = (laMap && room && laMap.roomLocations[room.id]) ? laMap.roomLocations[room.id][1] : -118.2437;
+  let lat, lng, locationName;
+  if (gps && gps.lat) {
+    lat = gps.lat;
+    lng = gps.lng;
+    locationName = 'your location';
+  } else if (laMap && room && laMap.roomLocations && laMap.roomLocations[room.id]) {
+    [lat, lng] = laMap.roomLocations[room.id];
+    locationName = (laMap.getRoomName && laMap.getRoomName(room.id)) || room.name || 'the area';
+  } else {
+    lat = 34.0522; lng = -118.2437; locationName = 'Los Angeles';
+  }
 
-  const modal   = document.getElementById('tavern-modal');
-  const list    = document.getElementById('tavern-list');
-  const label   = document.getElementById('tavern-location-label');
-  const status  = document.getElementById('tavern-action-status');
+  const modal  = document.getElementById('tavern-modal');
+  const list   = document.getElementById('tavern-list');
+  const label  = document.getElementById('tavern-location-label');
+  const status = document.getElementById('tavern-action-status');
 
   label.textContent = `Near ${locationName}`;
   list.innerHTML = '<div class="status-line"><span class="spinner"></span><span>Scouting establishments...</span></div>';
@@ -1769,23 +1804,32 @@ async function showTaverns() {
     const taverns = data.taverns || [];
 
     if (!taverns.length) {
-      list.innerHTML = '<div class="empty-state">No taverns found nearby. The wilderness is barren.</div>';
+      list.innerHTML = '<div class="empty-state">No real establishments found nearby. Try moving closer to a populated area.</div>';
       return;
     }
 
-    list.innerHTML = taverns.map((t, i) => `
+    list.innerHTML = taverns.map(t => {
+      const dist = t.distance_m < 1000
+        ? `${t.distance_m}m away`
+        : `${(t.distance_m / 1000).toFixed(1)}km away`;
+      const sub = [t.type, t.cuisine].filter(Boolean).join(' · ');
+      const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(t.name + ' ' + (t.address || ''))}`;
+      return `
       <div class="tavern-item">
         <span class="tavern-emoji">${t.emoji}</span>
         <div class="tavern-info">
-          <div class="tavern-name">${t.name}</div>
-          <div class="tavern-type">${t.type}${t.cuisine ? ' · ' + t.cuisine : ''}</div>
-          ${t.opening_hours ? `<div class="tavern-cuisine">⏰ ${t.opening_hours}</div>` : ''}
+          <div class="tavern-name">
+            <a href="${mapsUrl}" target="_blank" rel="noopener" style="color:inherit;text-decoration:none" title="Open in Google Maps">${t.name} ↗</a>
+          </div>
+          <div class="tavern-type">${sub}</div>
+          ${t.address ? `<div class="tavern-cuisine" style="color:var(--text-dim)">${t.address}</div>` : ''}
+          <div class="tavern-cuisine" style="color:var(--text-muted);font-size:11px">${dist}${t.opening_hours ? ' · ' + t.opening_hours : ''}</div>
         </div>
         <button class="tavern-visit-btn" onclick="visitTavern('${t.name.replace(/'/g,"\\'")}')">Visit</button>
-      </div>
-    `).join('');
+      </div>`;
+    }).join('');
   } catch (e) {
-    list.innerHTML = '<p style="color:var(--red);padding:12px">Failed to find nearby taverns.</p>';
+    list.innerHTML = '<p style="color:var(--red);padding:12px">Failed to find nearby establishments.</p>';
   }
 }
 
@@ -2486,6 +2530,18 @@ function boot() {
   showScreen('login');
   initGPS();
 }
+
+// Unlock Web Speech on the first user interaction (browsers block autoplay until gesture)
+let _speechUnlocked = false;
+document.addEventListener('click', function _unlockSpeech() {
+  if (_speechUnlocked || !('speechSynthesis' in window)) return;
+  _speechUnlocked = true;
+  // Fire a zero-length utterance to unblock the audio context
+  const u = new SpeechSynthesisUtterance('');
+  u.volume = 0;
+  speechSynthesis.speak(u);
+  document.removeEventListener('click', _unlockSpeech);
+}, { once: true });
 
 // Script is at bottom of <body> — DOM already parsed, call directly
 if (document.readyState === 'loading') {
