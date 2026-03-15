@@ -4,31 +4,32 @@
 
 /* ─── CSS Variables — Dark Mode (default) ─── */
 :root {
-  --bg:        #080810;
-  --bg2:       #0d0d1c;
-  --surface:   #131325;
-  --surface2:  #1a1a32;
-  --surface3:  #21213f;
-  --border:    #28284a;
-  --border2:   #383868;
+  --bg:        #0a0908;
+  --bg2:       #121110;
+  --surface:   #181614;
+  --surface2:  #201d1a;
+  --surface3:  #282420;
+  --border:    #352f28;
+  --border2:   #4a4238;
 
   --gold:      #c9a84c;
   --gold2:     #f0cc6a;
   --gold-dim:  #5a4818;
 
-  --red:       #e53935;
-  --red-dim:   #4a1414;
-  --green:     #43a047;
-  --green-dim: #163318;
-  --blue:      #1e88e5;
-  --blue-dim:  #0a2540;
-  --cyan:      #00bcd4;
-  --purple:    #7c3aed;
-  --orange:    #ff9800;
+  --red:       #d4453e;
+  --red-dim:   #3d1414;
+  --green:     #4a9850;
+  --green-dim: #162518;
+  --amber:     #d4a54a;
+  --amber-dim: #2a1f0a;
+  --purple:    #9065d6;
+  --purple-dim:#1e1230;
+  --orange:    #e89030;
+  --ember:     #c87040;
 
-  --text:      #e2e4f0;
-  --text-dim:  #8085b0;
-  --text-muted:#50547a;
+  --text:      #e8e2d8;
+  --text-dim:  #a09585;
+  --text-muted:#6a5f50;
 
   --font-title: 'Cinzel', serif;
   --font-deco:  'Cinzel Decorative', serif;
@@ -38,44 +39,45 @@
   --radius-lg: 14px;
   --shadow:    0 4px 28px rgba(0,0,0,0.7);
   --shadow-gold: 0 0 24px rgba(201,168,76,0.25);
-  --glow-red:  0 0 18px rgba(229,57,53,0.55);
-  --glow-blue: 0 0 18px rgba(30,136,229,0.45);
+  --glow-red:  0 0 18px rgba(212,69,62,0.55);
+  --glow-amber:0 0 18px rgba(212,165,74,0.35);
 
   --transition: 0.22s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* ─── Light Mode ─── */
 [data-theme="light"] {
-  --bg:        #f4f3ee;
-  --bg2:       #eceae0;
-  --surface:   #faf9f5;
-  --surface2:  #f0eeea;
-  --surface3:  #e5e3dc;
-  --border:    #d0cdc4;
-  --border2:   #b8b5ac;
+  --bg:        #f5f3ee;
+  --bg2:       #ece9e0;
+  --surface:   #faf8f4;
+  --surface2:  #f0ede8;
+  --surface3:  #e5e2da;
+  --border:    #d0cbc2;
+  --border2:   #b8b2a8;
 
   --gold:      #8a6a10;
   --gold2:     #a07c18;
   --gold-dim:  #f5e9c8;
 
-  --red:       #c62828;
-  --red-dim:   #fce8e8;
+  --red:       #b22020;
+  --red-dim:   #fce8e6;
   --green:     #2e7d32;
   --green-dim: #e8f5e9;
-  --blue:      #1565c0;
-  --blue-dim:  #e3f0fc;
-  --cyan:      #00838f;
+  --amber:     #a07818;
+  --amber-dim: #f8f0d8;
   --purple:    #5b21b6;
-  --orange:    #e65100;
+  --purple-dim:#f0e8fc;
+  --orange:    #c55800;
+  --ember:     #a05830;
 
-  --text:      #1a1814;
-  --text-dim:  #5a5548;
-  --text-muted:#8a8478;
+  --text:      #1a1610;
+  --text-dim:  #5a5445;
+  --text-muted:#8a8070;
 
   --shadow:    0 2px 16px rgba(0,0,0,0.12);
   --shadow-gold: 0 0 16px rgba(138,106,16,0.2);
-  --glow-red:  0 0 12px rgba(198,40,40,0.3);
-  --glow-blue: 0 0 12px rgba(21,101,192,0.3);
+  --glow-red:  0 0 12px rgba(178,32,32,0.3);
+  --glow-amber:0 0 12px rgba(160,120,24,0.3);
 }
 [data-theme="light"] #screen-login {
   background: radial-gradient(ellipse at 50% 30%, #d4c9a8 0%, #eceae0 70%);
@@ -90,10 +92,10 @@
 [data-theme="light"] .phase-banner.combat    { background: linear-gradient(90deg, #ffcdd2, transparent); }
 [data-theme="light"] .phase-banner.looting   { background: linear-gradient(90deg, #fff9c4, transparent); }
 [data-theme="light"] .bar-hp { background: linear-gradient(90deg, #e53935, #66bb6a); }
-[data-theme="light"] .log-entry.narrative { background: rgba(21,101,192,0.06); }
+[data-theme="light"] .log-entry.narrative { background: rgba(160,120,24,0.06); }
 [data-theme="light"] .log-entry.combat    { background: rgba(198,40,40,0.06); color: #c62828; }
 [data-theme="light"] .log-entry.loot      { background: rgba(138,106,16,0.08); color: var(--gold); }
-[data-theme="light"] .log-entry.system    { background: rgba(0,131,143,0.06); color: var(--cyan); }
+[data-theme="light"] .log-entry.system    { background: rgba(160,88,48,0.06); color: var(--ember); }
 [data-theme="light"] .enemy-card { background: #fdf6f6; border-color: #ffcdd2; }
 [data-theme="light"] .enemy-name { color: var(--red); }
 
@@ -287,7 +289,7 @@ html, body {
 }
 .bar-hp { background: linear-gradient(90deg, #c62828, #43a047); }
 .bar-hp.low { background: linear-gradient(90deg, #b71c1c, #e53935); animation: pulse-bar 1.2s infinite; }
-.bar-mp { background: linear-gradient(90deg, #283593, #1e88e5); }
+.bar-mp { background: linear-gradient(90deg, #4a2878, var(--purple)); }
 .bar-xp { background: linear-gradient(90deg, var(--gold-dim), var(--gold)); height: 4px; }
 
 @keyframes pulse-bar { 0%,100%{opacity:1} 50%{opacity:0.6} }
@@ -324,7 +326,7 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: radial-gradient(ellipse at 50% 30%, #1a0a2e 0%, var(--bg) 70%);
+  background: radial-gradient(ellipse at 50% 30%, #1a1408 0%, var(--bg) 70%);
 }
 
 .login-bg {
@@ -649,10 +651,10 @@ html, body {
   animation: log-in 0.3s ease;
 }
 @keyframes log-in { from { opacity:0; transform:translateX(-8px); } to { opacity:1; transform:none; } }
-.log-entry.narrative { border-color: var(--blue); background: rgba(30,136,229,0.05); color: var(--text); }
+.log-entry.narrative { border-color: var(--amber); background: rgba(212,165,74,0.04); color: var(--text); }
 .log-entry.combat    { border-color: var(--red); background: rgba(229,57,53,0.05); color: #ef9a9a; }
 .log-entry.loot      { border-color: var(--gold); background: rgba(201,168,76,0.05); color: var(--gold); }
-.log-entry.system    { border-color: var(--cyan); background: rgba(0,188,212,0.05); color: var(--cyan); }
+.log-entry.system    { border-color: var(--ember); background: rgba(200,112,64,0.05); color: var(--ember); }
 .log-entry.victory   { border-color: var(--gold2); background: rgba(240,204,106,0.1); color: var(--gold2); }
 .log-entry.error     { border-color: var(--red); color: var(--red); }
 .log-entry.roll      { border-color: #9c27b0; background: rgba(156,39,176,0.06); color: #ce93d8; font-family: var(--font-mono); font-size: 12px; }
@@ -691,8 +693,8 @@ html, body {
   font-size: 9px; color: #f0cc6a; white-space: nowrap; pointer-events: none;
 }
 /* Simulate travel button */
-.dir-btn--sim { border-color: #4fc3f733; color: #4fc3f7; }
-.dir-btn--sim.active { border-color: #4fc3f7; background: #4fc3f722; }
+.dir-btn--sim { border-color: rgba(201,168,76,0.2); color: var(--gold); }
+.dir-btn--sim.active { border-color: var(--gold); background: rgba(201,168,76,0.13); }
 .action-divider { width: 1px; height: 40px; background: var(--border); }
 .skill-btn {
   padding: 6px 12px;
@@ -706,9 +708,9 @@ html, body {
   cursor: pointer; transition: all var(--transition);
   display: flex; flex-direction: column; align-items: center; gap: 1px;
 }
-.skill-btn:hover:not(:disabled) { background: rgba(124,58,237,0.15); box-shadow: var(--glow-blue); }
+.skill-btn:hover:not(:disabled) { background: rgba(144,101,214,0.15); box-shadow: var(--glow-amber); }
 .skill-btn:disabled { opacity: 0.3; }
-.skill-btn .skill-cost { font-size: 9px; color: var(--blue); }
+.skill-btn .skill-cost { font-size: 9px; color: var(--purple); }
 .attack-btn {
   padding: 8px 20px;
   background: var(--red-dim);
@@ -843,7 +845,7 @@ html, body {
 .skill-header { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
 .skill-emoji { font-size: 16px; }
 .skill-name { font-family: var(--font-title); font-size: 11px; color: var(--purple); }
-.skill-mp { font-size: 9px; color: var(--blue); margin-left: auto; }
+.skill-mp { font-size: 9px; color: var(--purple); margin-left: auto; }
 .skill-desc { font-size: 10px; color: var(--text-dim); }
 
 /* ═══════════════════════════════════════════════════════
@@ -877,7 +879,7 @@ html, body {
 .la-marker__icon { position: relative; z-index: 1; line-height: 1; }
 .la-marker__dist {
   position: absolute; bottom: -18px; left: 50%; transform: translateX(-50%);
-  font-size: 9px; color: #4fc3f7; white-space: nowrap;
+  font-size: 9px; color: var(--gold2); white-space: nowrap;
   font-family: 'Roboto Mono', monospace; pointer-events: none;
   text-shadow: 0 1px 3px rgba(0,0,0,0.9);
 }
@@ -944,7 +946,7 @@ html, body {
   animation: float-up 1s ease forwards;
 }
 .damage-number.heal { color: var(--green); text-shadow: 0 0 10px rgba(67,160,71,0.8); }
-.damage-number.mana { color: var(--blue); }
+.damage-number.mana { color: var(--purple); }
 @keyframes float-up {
   0%   { opacity:1; transform:translateY(0) scale(1); }
   50%  { opacity:1; transform:translateY(-40px) scale(1.2); }

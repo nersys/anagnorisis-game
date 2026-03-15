@@ -339,11 +339,11 @@ class LAMap {
       return;
     }
     this.playerDot = L.circleMarker([lat, lng], {
-      radius: 8, fillColor: '#4fc3f7', color: '#fff', weight: 2, fillOpacity: 0.9,
+      radius: 8, fillColor: '#c9a84c', color: '#fff', weight: 2, fillOpacity: 0.9,
     }).addTo(this.map);
     this.playerDot.bindTooltip('📍 You are here', { permanent: false });
     this.proximityCircle = L.circle([lat, lng], {
-      radius: 80, color: '#4fc3f7', fillColor: '#4fc3f7',
+      radius: 80, color: '#c9a84c', fillColor: '#c9a84c',
       fillOpacity: 0.04, weight: 1, dashArray: '3 3',
     }).addTo(this.map);
     // Also pan map to player
@@ -461,7 +461,7 @@ class LAMap {
       <div style="font-family:'Roboto Mono',monospace;font-size:12px;min-width:160px">
         <strong style="color:#c9a84c">${realName}</strong><br>
         <span style="color:#777;font-size:10px;text-transform:uppercase;letter-spacing:1px">${room.game_role || room.room_type}</span>
-        ${room.distance_m != null ? `<br><span style="color:#4fc3f7">📍 ${room.distance_m}m away</span>` : ''}
+        ${room.distance_m != null ? `<br><span style="color:#c9a84c">📍 ${room.distance_m}m away</span>` : ''}
         ${!explored  ? '<br><span style="color:#555">⬛ Unexplored</span>' : ''}
         ${hasEnemy   ? '<br><span style="color:#e53935">⚔ Enemies here</span>'  : ''}
         ${cleared    ? '<br><span style="color:#43a047">✓ Cleared</span>'       : ''}
@@ -1022,7 +1022,7 @@ function leaveParty() {
 
 async function startAdventure() {
   const name = document.getElementById('input-adventure-name').value.trim() || 'Into the Depths';
-  const pos = getPosition();
+  let pos = getPosition();
 
   // Build payload — fetch nearby POIs if we have a position
   const payload = {
@@ -1032,6 +1032,18 @@ async function startAdventure() {
     difficulty: selectedDifficulty,
   };
 
+  // Always try to get location — from GPS, manual position, or IP geolocation
+  if (!pos) {
+    // No GPS — try IP geolocation as last resort
+    const ip = await getIPGeolocation();
+    if (ip) {
+      setManualPosition(ip.lat, ip.lng);
+      enableSimulateTravel();
+      pos = { lat: ip.lat, lng: ip.lng, accuracy: 5000 };
+      console.log('[Adventure] Falling back to IP geolocation:', ip);
+    }
+  }
+
   if (pos) {
     payload.lat = pos.lat;
     payload.lng = pos.lng;
@@ -1040,14 +1052,22 @@ async function startAdventure() {
     const locStatus = document.getElementById('location-status');
     payload.location_name = locStatus ? locStatus.textContent : `${pos.lat.toFixed(3)},${pos.lng.toFixed(3)}`;
 
-    // Fetch nearby POIs to seed the dungeon and the narrative
+    // Fetch nearby POIs to seed the dungeon from real-world places
     try {
+      console.log(`[Adventure] Fetching POIs near ${pos.lat.toFixed(4)}, ${pos.lng.toFixed(4)}...`);
       const r = await fetch(`/nearby-rooms?lat=${pos.lat}&lng=${pos.lng}&radius=800`);
       if (r.ok) {
         const data = await r.json();
         payload.pois = (data.pois || []).slice(0, 12);
+        console.log(`[Adventure] Got ${payload.pois.length} real POIs for dungeon`);
+      } else {
+        console.warn(`[Adventure] /nearby-rooms returned ${r.status} — using classic dungeon`);
       }
-    } catch(e) { /* proceed without POIs */ }
+    } catch(e) {
+      console.warn('[Adventure] Failed to fetch POIs:', e.message, '— using classic dungeon');
+    }
+  } else {
+    console.warn('[Adventure] No location available — using classic dungeon');
   }
 
   ws.send('START_ADVENTURE', payload);
@@ -2553,10 +2573,10 @@ function renderGPSIndicator() {
     el.textContent = `📍 GPS ±${Math.round(pos.accuracy)}m`; el.style.color = '#43a047';
     el.title = `Live GPS: ${pos.lat.toFixed(5)}, ${pos.lng.toFixed(5)}`;
   } else if (isSimulating()) {
-    el.textContent = `🌍 ${pos.lat.toFixed(3)}, ${pos.lng.toFixed(3)}`; el.style.color = '#4fc3f7';
+    el.textContent = `🌍 ${pos.lat.toFixed(3)}, ${pos.lng.toFixed(3)}`; el.style.color = '#c9a84c';
     el.title = 'Real-world dungeon active (desktop mode)';
   } else {
-    el.textContent = `📍 ${pos.lat.toFixed(3)}, ${pos.lng.toFixed(3)}`; el.style.color = '#4fc3f7';
+    el.textContent = `📍 ${pos.lat.toFixed(3)}, ${pos.lng.toFixed(3)}`; el.style.color = '#c9a84c';
     el.title = `Location set: ${pos.lat.toFixed(5)}, ${pos.lng.toFixed(5)}`;
   }
 }
