@@ -697,21 +697,49 @@ const CLASSES = {
 };
 
 const SKILLS = {
-  slash:          { name: 'Slash',         emoji: '⚔️', mp: 10, desc: 'A powerful sword strike dealing bonus damage.' },
-  shield_bash:    { name: 'Shield Bash',   emoji: '🛡️', mp: 8,  desc: 'Bash the enemy, stunning them for one turn.' },
-  battle_cry:     { name: 'Battle Cry',    emoji: '📣', mp: 12, desc: 'Raise your attack power for 3 turns.' },
-  fireball:       { name: 'Fireball',      emoji: '🔥', mp: 20, desc: 'Hurl a ball of fire that ignores armor.' },
-  frost_shield:   { name: 'Frost Shield',  emoji: '❄️', mp: 15, desc: 'Conjure ice armor, halving damage for 3 turns.' },
-  arcane_missile: { name: 'Arcane Missile',emoji: '💫', mp: 10, desc: 'A bolt of pure arcane energy.' },
-  backstab:       { name: 'Backstab',      emoji: '🗡️', mp: 15, desc: 'Strike from the shadows for massive damage.' },
-  stealth:        { name: 'Stealth',       emoji: '👤', mp: 10, desc: 'Vanish! Next attack deals triple damage.' },
-  pickpocket:     { name: 'Pickpocket',    emoji: '💰', mp: 5,  desc: 'Steal gold from an enemy.' },
-  heal:           { name: 'Heal',          emoji: '💚', mp: 20, desc: 'Restore 30% of your max HP.' },
-  smite:          { name: 'Smite',         emoji: '☀️', mp: 18, desc: 'Divine strike that bypasses defense.' },
-  bless:          { name: 'Bless',         emoji: '🙏', mp: 12, desc: 'Blessed by the gods, attack up for 3 turns.' },
-  aimed_shot:     { name: 'Aimed Shot',    emoji: '🎯', mp: 12, desc: 'A precise shot dealing heavy damage.' },
-  trap:           { name: 'Trap',          emoji: '🪤', mp: 8,  desc: 'Set a trap that stuns the enemy.' },
-  animal_companion:{ name: 'Companion',    emoji: '🐺', mp: 15, desc: 'Your wolf companion attacks for you.' },
+  // Warrior
+  slash:          { name: 'Slash',          emoji: '⚔️',  mp: 10, desc: 'A powerful sword strike dealing bonus damage.' },
+  shield_bash:    { name: 'Shield Bash',    emoji: '🛡️',  mp: 8,  desc: 'Bash the enemy, stunning them for one turn.' },
+  battle_cry:     { name: 'Battle Cry',     emoji: '📣',  mp: 12, desc: 'Raise your attack power for 3 turns.' },
+  power_strike:   { name: 'Power Strike',   emoji: '💥',  mp: 18, desc: '2x damage physical blow.' },
+  iron_skin:      { name: 'Iron Skin',      emoji: '🪨',  mp: 10, desc: 'Reduce incoming damage for 4 turns.' },
+  whirlwind:      { name: 'Whirlwind',      emoji: '🌀',  mp: 22, desc: 'Strike all enemies in a spinning blow.' },
+  cleave:         { name: 'Cleave',         emoji: '🪓',  mp: 15, desc: 'Heavy cleave that weakens the enemy.' },
+  execute:        { name: 'Execute',        emoji: '⚰️',  mp: 20, desc: 'Extra damage on weakened foes.' },
+  taunt:          { name: 'Taunt',          emoji: '😤',  mp: 8,  desc: 'Stun enemies with intimidation.' },
+  // Mage
+  fireball:       { name: 'Fireball',       emoji: '🔥',  mp: 20, desc: 'Hurl a ball of fire that ignores armor.' },
+  frost_shield:   { name: 'Frost Shield',   emoji: '❄️',  mp: 15, desc: 'Conjure ice armor, halving damage for 3 turns.' },
+  arcane_missile: { name: 'Arcane Missile', emoji: '💫',  mp: 10, desc: 'A bolt of pure arcane energy.' },
+  chain_lightning:{ name: 'Chain Lightning',emoji: '⚡',  mp: 25, desc: 'Lightning arcs through all enemies.' },
+  blink:          { name: 'Blink',          emoji: '🌀',  mp: 18, desc: 'Teleport dodge — stun enemy next turn.' },
+  time_warp:      { name: 'Time Warp',      emoji: '⌛',  mp: 30, desc: 'Slow time: skip enemy next 2 turns.' },
+  ice_lance:      { name: 'Ice Lance',      emoji: '🔵',  mp: 15, desc: 'Frozen projectile — applies Frozen.' },
+  mana_surge:     { name: 'Mana Surge',     emoji: '🔮',  mp: 5,  desc: 'Restore MP by dealing arcane damage.' },
+  // Rogue
+  backstab:       { name: 'Backstab',       emoji: '🗡️',  mp: 15, desc: 'Strike from the shadows for massive damage.' },
+  stealth:        { name: 'Stealth',        emoji: '👤',  mp: 10, desc: 'Vanish! Next attack deals 2x damage.' },
+  pickpocket:     { name: 'Pickpocket',     emoji: '💰',  mp: 5,  desc: 'Steal gold from an enemy.' },
+  smoke_screen:   { name: 'Smoke Screen',   emoji: '💨',  mp: 12, desc: 'Blind enemy, dropping their attack.' },
+  cripple:        { name: 'Cripple',        emoji: '🦵',  mp: 16, desc: 'Weaken enemy — reduce defense 2 turns.' },
+  shadow_step:    { name: 'Shadow Step',    emoji: '🌑',  mp: 20, desc: 'Shadowstep deal double poison dmg.' },
+  fan_of_blades:  { name: 'Fan of Blades',  emoji: '🪃',  mp: 18, desc: 'Throw blades at all enemies.' },
+  // Cleric
+  heal:           { name: 'Heal',           emoji: '💚',  mp: 20, desc: 'Restore 30% of your max HP.' },
+  smite:          { name: 'Smite',          emoji: '☀️',  mp: 18, desc: 'Divine strike that bypasses defense.' },
+  bless:          { name: 'Bless',          emoji: '🙏',  mp: 12, desc: 'Blessed by the gods, attack up for 3 turns.' },
+  holy_nova:      { name: 'Holy Nova',      emoji: '✨',  mp: 28, desc: 'Blast all enemies with holy light and heal self.' },
+  resurrection:   { name: 'Resurrection',  emoji: '💫',  mp: 35, desc: 'Rise! Restore 50% HP from near-death.' },
+  divine_shield:  { name: 'Divine Shield', emoji: '🛡️',  mp: 22, desc: 'Negate all damage for 2 turns.' },
+  consecrate:     { name: 'Consecrate',    emoji: '🕯️',  mp: 20, desc: 'Curse the ground — poison all enemies.' },
+  // Ranger
+  aimed_shot:     { name: 'Aimed Shot',    emoji: '🎯',  mp: 12, desc: 'A precise shot dealing heavy damage.' },
+  trap:           { name: 'Trap',          emoji: '🪤',  mp: 8,  desc: 'Set a trap that stuns the enemy.' },
+  animal_companion:{ name: 'Companion',   emoji: '🐺',  mp: 15, desc: 'Your wolf companion attacks for you.' },
+  volley:         { name: 'Volley',        emoji: '🏹',  mp: 22, desc: 'Rain arrows on all enemies.' },
+  entangle:       { name: 'Entangle',      emoji: '🌿',  mp: 14, desc: 'Roots enemy in vines — stun 2 turns.' },
+  eagle_eye:      { name: 'Eagle Eye',     emoji: '🦅',  mp: 12, desc: 'Expose weakness — next shot ignores defense.' },
+  camouflage:     { name: 'Camouflage',    emoji: '🌲',  mp: 10, desc: 'Blend in: next attack does 2x nature damage.' },
 };
 
 const ITEM_EMOJIS = {
@@ -1769,14 +1797,20 @@ function renderActionBar() {
     });
 
     const skillContainer = document.getElementById('skill-buttons');
+    const cooldowns = (state.combat && state.combat.skill_cooldowns) || {};
     skills.forEach(skillKey => {
       const skill = SKILLS[skillKey] || { name: skillKey, emoji: '✨', mp: 0 };
       const p = state.player;
-      const canUse = !p || (ps(p).mana >= skill.mp);
+      const cdTurns = cooldowns[skillKey] || 0;
+      const canUse = !p || (ps(p).mana >= skill.mp && cdTurns === 0);
       const btn = document.createElement('button');
-      btn.className = 'skill-btn';
+      btn.className = `skill-btn${cdTurns > 0 ? ' on-cooldown' : ''}`;
       btn.disabled = !canUse;
-      btn.innerHTML = `<span>${skill.emoji} ${skill.name}</span><span class="skill-cost">${skill.mp} MP</span>`;
+      if (cdTurns > 0) {
+        btn.innerHTML = `<span>${skill.emoji} ${skill.name}</span><span class="skill-cooldown-overlay">${cdTurns}</span>`;
+      } else {
+        btn.innerHTML = `<span>${skill.emoji} ${skill.name}</span><span class="skill-cost">${skill.mp} MP</span>`;
+      }
       btn.addEventListener('click', () => {
         ws.send('COMBAT_ACTION', { action: 'skill', skill_name: skillKey });
       });
@@ -1883,14 +1917,19 @@ function renderEnemies() {
 
   document.getElementById('combat-panel-title').textContent = `⚔ Combat — Turn ${combat.turn_number || 1}`;
 
+  const enemyStatuses = (combat.enemy_status_effects) || {};
   el.innerHTML = combat.enemies.map(enemy => {
     const hpPct = pctOf(enemy.hp, enemy.max_hp);
     const isDead = enemy.hp <= 0;
+    const phase2 = enemy.boss_phase === 2;
+    const statusEffects = (enemyStatuses[enemy.id] || []);
+    const statusBadges = statusEffects.map(e =>
+      `<span class="status-badge">${e.emoji} ${e.turns}</span>`).join('');
     return `
-      <div class="enemy-card ${enemy.stunned ? 'stunned' : ''} ${isDead ? 'dead' : ''}" id="enemy-${enemy.id}">
+      <div class="enemy-card ${enemy.stunned ? 'stunned' : ''} ${isDead ? 'dead' : ''} ${phase2 ? 'phase2' : ''}" id="enemy-${enemy.id}">
         <div class="enemy-header">
           <span class="enemy-emoji">${enemy.emoji || '👹'}</span>
-          <span class="enemy-name">${enemy.name}</span>
+          <span class="enemy-name">${enemy.name}${phase2 ? ' 💢' : ''}</span>
           ${enemy.is_boss ? '<span class="enemy-boss-tag">BOSS</span>' : ''}
           ${enemy.stunned ? '<span class="enemy-stun-tag">STUNNED</span>' : ''}
         </div>
@@ -1898,6 +1937,7 @@ function renderEnemies() {
           <div class="enemy-hp-fill" style="width:${hpPct}%"></div>
         </div>
         <div class="enemy-hp-text">${enemy.hp}/${enemy.max_hp} HP · ATK ${enemy.attack} · DEF ${enemy.defense}</div>
+        ${statusBadges ? `<div class="status-badges">${statusBadges}</div>` : ''}
       </div>
     `;
   }).join('');
@@ -2663,7 +2703,17 @@ function setupHandlers() {
       shakeScreen();
     }
 
-    // Level-up detection
+    // Death / Victory overlay
+    if (payload.phase === 'game_over') {
+      saveAdventureToProfile('defeat', payload);
+      setTimeout(() => showGameOverOverlay(payload.death_narrative || '', payload), 600);
+    }
+    if (payload.phase === 'victory') {
+      saveAdventureToProfile('victory', payload);
+      setTimeout(() => showVictoryOverlay(payload.victory_narrative || '', payload), 600);
+    }
+
+    // Level-up detection (purely visual; real trigger now comes via LEVEL_UP_CHOICE)
     const prevLevel = state.player && state.player.stats ? state.player.stats.level : 1;
     if (payload.player_stats && payload.player_stats.level && payload.player_stats.level > prevLevel) {
       triggerLevelUp(payload.player_stats.level);
@@ -2923,6 +2973,25 @@ function setupHandlers() {
     }
   });
 
+  // Level-up skill choice
+  ws.on('LEVEL_UP_CHOICE', msg => {
+    const { level, choices, skill_defs } = msg.payload || {};
+    triggerLevelUp(level);
+    setTimeout(() => showSkillChoiceOverlay(level, choices, skill_defs), 2800);
+  });
+
+  // Boss phase 2 enrage
+  ws.on('BOSS_PHASE_2', msg => {
+    const { boss_name, ability } = msg.payload || {};
+    showBossPhase2Banner(boss_name, ability);
+  });
+
+  // NPC encounter
+  ws.on('NPC_ENCOUNTER', msg => {
+    const npc = msg.payload || {};
+    showNPCEncounterBanner(npc);
+  });
+
   // Errors
   ws.on('ERROR', msg => {
     const payload = msg.payload || {};
@@ -2938,13 +3007,29 @@ function setupHandlers() {
     }
   });
 
-  // Heartbeat response (has game time)
+  // Heartbeat response / general success
   ws.on('SUCCESS', msg => {
     const payload = msg.payload || {};
     if (payload.game_day !== undefined) {
       state.gameDay  = payload.game_day;
       state.gameHour = payload.game_hour || 0;
       if (state.screen === 'game') renderPhaseBanner();
+    }
+    // Skill learned
+    if (payload.skill && payload.skills) {
+      if (state.player) state.player.skills = payload.skills;
+      if (payload.player_stats) {
+        if (state.player) state.player.stats = payload.player_stats;
+      }
+      addLog(`✨ ${payload.message}`, 'system');
+      if (state.screen === 'game') renderStats();
+    }
+    // Item equipped
+    if (payload.item_key && payload.slot) {
+      if (payload.player_stats && state.player) state.player.stats = payload.player_stats;
+      if (payload.inventory && state.player) state.player.inventory = payload.inventory;
+      addLog(`🔧 ${payload.message}`, 'loot');
+      if (state.screen === 'game') { renderStats(); renderInventoryPanel(); }
     }
   });
 
@@ -3105,6 +3190,7 @@ function boot() {
   initGame();
   showScreen('login');
   initGPS();
+  showReturningAdventurerCard();
 }
 
 // Unlock Web Speech on the first user interaction (browsers block autoplay until gesture)
@@ -3265,6 +3351,314 @@ function triggerEnemyDeath(enemyId) {
   if (!el) return;
   el.classList.add('dying');
   setTimeout(() => el.remove(), 600);
+}
+
+// ══════════════════════════════════════════════════════════════
+// SKILL CHOICE OVERLAY (LEVEL UP)
+// ══════════════════════════════════════════════════════════════
+
+function showSkillChoiceOverlay(level, choices, skillDefs) {
+  if (!choices || !choices.length) return;
+  document.getElementById('skill-choice-overlay')?.remove();
+  const overlay = document.createElement('div');
+  overlay.id = 'skill-choice-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:9000;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(0,0,0,0.92);backdrop-filter:blur(8px);';
+  const cards = choices.map(skillKey => {
+    const sd = skillDefs && skillDefs[skillKey] || {};
+    const ls = SKILLS[skillKey] || { name: skillKey, emoji: '✨', mp: 0, desc: '' };
+    const name = sd.name || ls.name;
+    const emoji = sd.emoji || ls.emoji;
+    const mp = sd.mp_cost !== undefined ? sd.mp_cost : ls.mp;
+    const desc = sd.description || ls.desc;
+    const dtype = sd.damage_type ? `<span class="skill-dtype-badge">${sd.damage_type}</span>` : '';
+    const cd = sd.cooldown_turns ? `<span class="skill-cd-badge">${sd.cooldown_turns}t cd</span>` : '';
+    return `
+      <div class="skill-choice-card" data-skill="${skillKey}">
+        <div class="scc-emoji">${emoji}</div>
+        <div class="scc-name">${name}</div>
+        <div class="scc-badges">${dtype}${cd}</div>
+        <div class="scc-mp">${mp} MP</div>
+        <div class="scc-desc">${desc}</div>
+        <button class="btn btn-accent scc-pick" data-skill="${skillKey}">Choose</button>
+      </div>
+    `;
+  }).join('');
+  overlay.innerHTML = `
+    <div style="text-align:center;margin-bottom:28px;">
+      <div style="font-family:var(--font-title,serif);font-size:11px;color:var(--amber,#c9a84c);letter-spacing:0.25em;text-transform:uppercase;">Level ${level} — Choose a Skill</div>
+    </div>
+    <div class="skill-choice-cards">${cards}</div>
+  `;
+  document.body.appendChild(overlay);
+  overlay.querySelectorAll('.scc-pick').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const skillKey = btn.dataset.skill;
+      ws.send('SKILL_CHOSEN', { skill: skillKey });
+      overlay.style.opacity = '0';
+      setTimeout(() => overlay.remove(), 300);
+    });
+  });
+}
+
+// ══════════════════════════════════════════════════════════════
+// BOSS PHASE 2 BANNER
+// ══════════════════════════════════════════════════════════════
+
+function showBossPhase2Banner(bossName, ability) {
+  const banner = document.createElement('div');
+  banner.className = 'boss-phase2-banner';
+  banner.innerHTML = `
+    <div class="bp2-title">💢 ${bossName || 'BOSS'} ENRAGES!</div>
+    ${ability ? `<div class="bp2-ability">${ability}</div>` : ''}
+  `;
+  document.body.appendChild(banner);
+  shakeScreen();
+  setTimeout(() => {
+    banner.style.opacity = '0';
+    setTimeout(() => banner.remove(), 600);
+  }, 3500);
+}
+
+// ══════════════════════════════════════════════════════════════
+// NPC ENCOUNTER BANNER
+// ══════════════════════════════════════════════════════════════
+
+const NPC_ALIGNMENT_COLOR = {
+  friendly: 'var(--amber,#c9a84c)',
+  neutral:  '#a08040',
+  cryptic:  'var(--purple,#9c4dcc)',
+  hostile:  '#c0392b',
+};
+
+function showNPCEncounterBanner(npc) {
+  const color = NPC_ALIGNMENT_COLOR[npc.alignment] || 'var(--amber,#c9a84c)';
+  const banner = document.createElement('div');
+  banner.className = 'npc-encounter-banner';
+  banner.style.borderColor = color;
+  banner.innerHTML = `
+    <div class="npc-banner-header" style="color:${color}">
+      <span class="npc-banner-emoji">${npc.emoji || '👤'}</span>
+      <span class="npc-banner-name">${npc.name}</span>
+      <span class="npc-banner-role">${npc.role || ''}</span>
+    </div>
+    <div class="npc-banner-line">"${npc.line || ''}"</div>
+    ${npc.tip ? `<div class="npc-banner-tip">💡 ${npc.tip}</div>` : ''}
+  `;
+  const logEl = document.getElementById('narrative-log');
+  if (logEl) {
+    logEl.insertBefore(banner, logEl.firstChild);
+    logEl.scrollTop = 0;
+  } else {
+    document.body.appendChild(banner);
+  }
+  addLog(`${npc.emoji || '👤'} ${npc.name}: "${npc.line || ''}"`, 'narrative');
+  // TTS via narratorSpeak if not already triggered by DM_RESPONSE
+  narratorSpeak(npc.line || '');
+}
+
+// ══════════════════════════════════════════════════════════════
+// GAME OVER OVERLAY
+// ══════════════════════════════════════════════════════════════
+
+function showGameOverOverlay(narrative, payload) {
+  document.getElementById('game-over-overlay')?.remove();
+  const dungeon = state.dungeon || {};
+  const stats = {
+    rooms: dungeon.rooms_cleared || 0,
+    enemies: payload.enemies_slain || 0,
+    gold: dungeon.gold_collected || 0,
+    turns: payload.turns_played || 0,
+  };
+  const overlay = document.createElement('div');
+  overlay.id = 'game-over-overlay';
+  overlay.className = 'game-end-overlay game-over-overlay';
+  overlay.innerHTML = `
+    <div class="geo-title">FALLEN</div>
+    <div class="geo-narrative" id="geo-narrative-text"></div>
+    <div class="geo-stats">
+      <div class="geo-stat"><span class="geo-stat-icon">🏛️</span><span>${stats.rooms}</span><span>Rooms</span></div>
+      <div class="geo-stat"><span class="geo-stat-icon">💀</span><span>${stats.enemies}</span><span>Slain</span></div>
+      <div class="geo-stat"><span class="geo-stat-icon">💰</span><span>${stats.gold}</span><span>Gold</span></div>
+      <div class="geo-stat"><span class="geo-stat-icon">⚔️</span><span>${stats.turns}</span><span>Turns</span></div>
+    </div>
+    <div id="geo-return-wrap" style="opacity:0;transition:opacity 0.5s"></div>
+  `;
+  document.body.appendChild(overlay);
+  if (narrative) typewriterInto('geo-narrative-text', narrative, 40);
+  setTimeout(() => {
+    const wrap = document.getElementById('geo-return-wrap');
+    if (wrap) {
+      wrap.style.opacity = '1';
+      wrap.innerHTML = '<button class="btn btn-primary" id="btn-geo-lobby">Return to Lobby</button>';
+      document.getElementById('btn-geo-lobby')?.addEventListener('click', () => {
+        overlay.remove();
+        returnToLobby();
+      });
+    }
+  }, 5000);
+}
+
+// ══════════════════════════════════════════════════════════════
+// VICTORY OVERLAY
+// ══════════════════════════════════════════════════════════════
+
+function showVictoryOverlay(narrative, payload) {
+  document.getElementById('victory-overlay')?.remove();
+  const dungeon = state.dungeon || {};
+  const stats = {
+    rooms: dungeon.rooms_cleared || 0,
+    enemies: payload.enemies_slain || 0,
+    gold: dungeon.gold_collected || 0,
+    turns: payload.turns_played || 0,
+  };
+  const overlay = document.createElement('div');
+  overlay.id = 'victory-overlay';
+  overlay.className = 'game-end-overlay victory-overlay';
+  overlay.innerHTML = `
+    <div class="geo-title">DUNGEON FALLS</div>
+    <div class="geo-narrative" id="victory-narrative-text"></div>
+    <div class="geo-stats">
+      <div class="geo-stat"><span class="geo-stat-icon">🏛️</span><span>${stats.rooms}</span><span>Rooms</span></div>
+      <div class="geo-stat"><span class="geo-stat-icon">💀</span><span>${stats.enemies}</span><span>Slain</span></div>
+      <div class="geo-stat"><span class="geo-stat-icon">💰</span><span>${stats.gold}</span><span>Gold</span></div>
+      <div class="geo-stat"><span class="geo-stat-icon">⚔️</span><span>${stats.turns}</span><span>Turns</span></div>
+    </div>
+    <button class="btn btn-accent" id="btn-vic-lobby">🏆 Return to Lobby</button>
+  `;
+  document.body.appendChild(overlay);
+  if (narrative) typewriterInto('victory-narrative-text', narrative, 35);
+  document.getElementById('btn-vic-lobby')?.addEventListener('click', () => {
+    overlay.remove();
+    returnToLobby();
+  });
+}
+
+// ── Typewriter into a specific element ──
+function typewriterInto(elementId, text, msPerChar) {
+  const el = document.getElementById(elementId);
+  if (!el) return;
+  let i = 0;
+  el.textContent = '';
+  const t = setInterval(() => {
+    if (i < text.length) { el.textContent += text[i++]; } else clearInterval(t);
+  }, msPerChar || 35);
+}
+
+// ══════════════════════════════════════════════════════════════
+// EQUIPMENT UI (Inventory Panel)
+// ══════════════════════════════════════════════════════════════
+
+const EQUIPMENT_RARITIES = {
+  common: { label: 'Common', color: '#aaa' },
+  uncommon: { label: 'Uncommon', color: '#43a047' },
+  rare: { label: 'Rare', color: '#7c4dff' },
+  legendary: { label: 'Legendary', color: '#c9a84c' },
+};
+
+// Equipment templates known to client (subset for display)
+function getEquipTemplate(itemKey) {
+  // Server sends these in player_stats.equipped or we derive from inventory key naming
+  // We just need to show equip button for keys that look like equipment
+  const equipKeys = [
+    'iron_sword_plus1','oak_staff_plus1','twin_fangs','holy_mace_plus1',
+    'longbow_plus1','hunting_knife_plus1','shadowweave_cloak','arcane_focus',
+    'veil_shard_weapon','veil_shard_armor','leather_armor_plus1','chain_mail_plus1',
+    'iron_ring','assassins_gloves','hunters_pendant',
+  ];
+  return equipKeys.includes(itemKey) ? { isEquipment: true } : null;
+}
+
+function renderInventoryPanel() {
+  // Only update if the inventory modal is open
+  const modal = document.getElementById('inventory-modal');
+  if (!modal || !modal.style.display || modal.style.display === 'none') return;
+  // Re-render the modal contents
+  renderInventoryModal(modal);
+}
+
+function renderInventoryModal(modal) {
+  const p = state.player;
+  if (!p) { modal.innerHTML = '<div style="color:#666">No player</div>'; return; }
+  const stats = ps(p);
+  const equipped = (stats && stats.equipped) || {};
+  const inv = p.inventory || [];
+
+  // Equipped slots section
+  const slotsHtml = ['weapon', 'armor', 'accessory'].map(slot => {
+    const itemKey = equipped[slot];
+    const label = itemKey ? itemKey.replace(/_/g,' ') : '—';
+    return `<div class="equip-slot">
+      <span class="equip-slot-label">${slot.toUpperCase()}</span>
+      <span class="equip-slot-item ${itemKey ? 'equipped' : 'empty'}">${itemKey ? '🔸 ' + label : 'none'}</span>
+    </div>`;
+  }).join('');
+
+  // Inventory items
+  const itemsHtml = inv.length === 0 ? '<div class="empty-state">Empty</div>' : inv.map(itemKey => {
+    const isEquip = getEquipTemplate(itemKey);
+    const emoji = ITEM_EMOJIS[itemKey] || ITEM_EMOJIS.default || '📦';
+    const name = formatName(itemKey);
+    const equipBtn = isEquip ? `<button class="btn-equip" data-item="${itemKey}">Equip</button>` : '';
+    return `<div class="inv-item-row"><span class="inv-item-emoji">${emoji}</span><span class="inv-item-name">${name}</span>${equipBtn}</div>`;
+  }).join('');
+
+  modal.innerHTML = `
+    <div class="inv-equipped-section"><div class="inv-section-title">Equipped</div>${slotsHtml}</div>
+    <div class="inv-section-title" style="margin-top:14px">Inventory</div>
+    ${itemsHtml}
+  `;
+  modal.querySelectorAll('.btn-equip').forEach(btn => {
+    btn.addEventListener('click', () => {
+      ws.send('EQUIP_ITEM', { item_key: btn.dataset.item });
+    });
+  });
+}
+
+// ══════════════════════════════════════════════════════════════
+// localStorage ADVENTURE PROFILE
+// ══════════════════════════════════════════════════════════════
+
+const PROFILE_KEY = 'anagnorisis_profile';
+
+function loadProfile() {
+  try { return JSON.parse(localStorage.getItem(PROFILE_KEY)) || null; }
+  catch { return null; }
+}
+
+function saveAdventureToProfile(result, payload) {
+  const p = state.player;
+  if (!p) return;
+  let profile = loadProfile() || { name: p.name, playerClass: p.player_class, adventures: [], bestLevel: 1, totalGold: 0 };
+  const dungeon = state.dungeon || {};
+  const run = {
+    date: new Date().toISOString().slice(0, 10),
+    result,
+    level: (p.stats && p.stats.level) || 1,
+    gold: dungeon.gold_collected || 0,
+    enemies: payload.enemies_slain || 0,
+    rooms: dungeon.rooms_cleared || 0,
+  };
+  profile.adventures.unshift(run);
+  if (profile.adventures.length > 10) profile.adventures = profile.adventures.slice(0, 10);
+  profile.bestLevel = Math.max(profile.bestLevel || 1, run.level);
+  profile.totalGold = (profile.totalGold || 0) + run.gold;
+  try { localStorage.setItem(PROFILE_KEY, JSON.stringify(profile)); } catch {}
+}
+
+function showReturningAdventurerCard() {
+  const profile = loadProfile();
+  const el = document.getElementById('returning-adventurer');
+  if (!el) return;
+  if (!profile || !profile.adventures || !profile.adventures.length) {
+    el.style.display = 'none';
+    return;
+  }
+  const last = profile.adventures[0];
+  el.style.display = '';
+  el.innerHTML = `
+    <div class="ra-greeting">Welcome back, <strong>${profile.name}</strong></div>
+    <div class="ra-last">Last run: ${last.result === 'victory' ? '🏆' : '💀'} Lvl ${last.level} · ${last.rooms} rooms · ${last.gold}g</div>
+  `;
 }
 
 // ── Hook: start embers when game screen shows ──

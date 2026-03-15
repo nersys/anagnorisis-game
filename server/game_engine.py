@@ -49,10 +49,19 @@ from shared.constants import (
     GAME_TICK_SECONDS,
     SKILL_DEFINITIONS,
     ITEM_TEMPLATES,
+    ENEMY_TEMPLATES,
+    XP_PER_LEVEL,
+    LEVEL_STAT_GAINS,
+    LEVEL_SKILL_UNLOCKS,
+    STATUS_EFFECTS,
+    EQUIPMENT_TEMPLATES,
+    EQUIPMENT_RARITY_WEIGHTS,
+    EQUIPMENT_DROP_BY_ROOM,
 )
 from server.connection_manager import ConnectionManager
 from server.ai_dungeon_master import AIDungeonMaster
 from server.dungeon_generator import generate_dungeon, generate_dungeon_from_pois
+from server.story import get_npc_roster
 
 logger = logging.getLogger("anagnorisis.engine")
 
@@ -156,6 +165,10 @@ class GameEngine:
             MessageType.TAVERN_VISIT: self._handle_tavern_visit,
             MessageType.DICE_RESULT: self._handle_dice_result,
             MessageType.DM_CONFIG: self._handle_dm_config,
+            # Progression
+            MessageType.SKILL_CHOSEN: self._handle_skill_chosen,
+            # Equipment
+            MessageType.EQUIP_ITEM: self._handle_equip_item,
         }
         
         handler = handlers.get(message.type)
@@ -918,6 +931,41 @@ class GameEngine:
             self._player_phase[player_id] = GamePhase.EXPLORING
 
         player = self._players.get(player_id)
+
+        # NPC encounter: 20% chance when room has a game_role and no combat
+        npc_encounter_payload = None
+        if new_phase == GamePhase.EXPLORING and target_room.game_role and random.random() < 0.20:
+            adventure = next(
+                (self._adventures.get(p.current_adventure_id)
+                 for p in self._parties.values() if player_id in p.member_ids
+                 and p.current_adventure_id), None)
+            if adventure:
+                npc_roster = get_npc_roster()
+                for npc_key, npc in npc_roster.items():
+                    if target_room.game_role in npc.get("location_types", []):
+                        already_met = npc_key in adventure.met_npcs
+                        npc_line = npc["met_again"] if already_met else npc["first_encounter"]
+                        if not already_met:
+                            adventure.met_npcs.append(npc_key)
+                        npc_encounter_payload = {
+                            "npc_key": npc_key, "name": npc["name"],
+                            "emoji": npc["emoji"], "role": npc["role"],
+                            "alignment": npc["alignment"], "line": npc_line,
+                            "tip": npc.get("tip"), "already_met": already_met,
+                        }
+                        # TTS narration via DM
+                        if self._dm and player:
+                            try:
+                                narration = await self._dm.narrate_npc_encounter(
+                                    player, adventure, npc, target_room.name)
+                                if narration:
+                                    await manager.send_to(connection_id, GameMessage(
+                                        type=MessageType.DM_RESPONSE,
+                                        payload={"text": narration, "speak": True}))
+                            except Exception:
+                                pass
+                        break
+
         await manager.send_to(connection_id, GameMessage(
             type=MessageType.ROOM_ENTERED,
             payload={
@@ -928,6 +976,12 @@ class GameEngine:
                 "player_stats": player.stats.model_dump() if player else {},
             }
         ))
+        # Send NPC encounter as separate message after room entry
+        if npc_encounter_payload:
+            await manager.send_to(connection_id, GameMessage(
+                type=MessageType.NPC_ENCOUNTER,
+                payload=npc_encounter_payload,
+            ))
         return None
 
     # ============================================
@@ -971,6 +1025,41 @@ class GameEngine:
 
         # --- Player turn ---
         if combat.player_turn:
+            # Process status effects at start of each turn
+            self._process_status_effects(combat, player, log)
+            # Check if status effects killed the player
+            if player.stats.health <= 0:
+                log.append("You succumb to your wounds! Game over.")
+                self._player_phase[player_id] = GamePhase.GAME_OVER
+                death_narrative = "Your light fades..."
+                try:
+                    if self._dm:
+                        dungeon = self._player_dungeons.get(player_id)
+                        adventure = next(
+                            (self._adventures.get(p.current_adventure_id)
+                             for p in self._parties.values() if player_id in p.member_ids
+                             and p.current_adventure_id), None)
+                        stats = {
+                            "rooms_cleared": dungeon.rooms_cleared if dungeon else 0,
+                            "enemies_slain": adventure.enemies_slain if adventure else 0,
+                            "gold_found": dungeon.gold_collected if dungeon else 0,
+                            "turns_played": adventure.turns_played if adventure else 0,
+                        }
+                        death_narrative = await self._dm.generate_death_narrative(player, adventure, stats)
+                except Exception:
+                    pass
+                await manager.send_to(connection_id, GameMessage(
+                    type=MessageType.COMBAT_UPDATE,
+                    payload={
+                        "log": log,
+                        "phase": GamePhase.GAME_OVER.value,
+                        "player_stats": player.stats.model_dump(),
+                        "combat": _combat_to_dict(combat),
+                        "death_narrative": death_narrative,
+                    }
+                ))
+                return None
+
             if action == "flee":
                 success = random.random() < 0.6
                 if success:
@@ -1000,7 +1089,7 @@ class GameEngine:
                     log.append("You try to flee but the enemies block your path!")
 
             elif action == "attack":
-                dmg, msg = self._calc_player_attack(player, combat, bonus_mult=1.0)
+                dmg, msg, _dtype = self._calc_player_attack(player, combat, bonus_mult=1.0)
                 self._apply_damage_to_enemy(combat, 0, dmg)
                 log.append(msg)
 
@@ -1015,6 +1104,19 @@ class GameEngine:
 
             # Remove dead enemies
             combat.enemies = [e for e in combat.enemies if e.hp > 0]
+
+            # Boss phase 2: triggers at 50% HP
+            for enemy in combat.enemies:
+                if enemy.is_boss and enemy.boss_phase == 1 and enemy.hp <= enemy.max_hp // 2:
+                    enemy.boss_phase = 2
+                    template = ENEMY_TEMPLATES.get(enemy.template_key or "", {})
+                    enemy.attack += template.get("phase2_attack_bonus", 4)
+                    log.append(f"💀 {enemy.name} ENRAGES! Power surges through them!")
+                    await manager.send_to(connection_id, GameMessage(
+                        type=MessageType.BOSS_PHASE_2,
+                        payload={"boss_name": enemy.name,
+                                 "ability": template.get("phase2_ability", "")}
+                    ))
 
             # Check win condition
             if not combat.enemies:
@@ -1039,6 +1141,24 @@ class GameEngine:
             if player.stats.health <= 0:
                 log.append(f"You have been slain by {enemy.name}! Game over.")
                 self._player_phase[player_id] = GamePhase.GAME_OVER
+                death_narrative = "Your light fades..."
+                try:
+                    if self._dm:
+                        adventure = next(
+                            (self._adventures.get(p.current_adventure_id)
+                             for p in self._parties.values() if player_id in p.member_ids
+                             and p.current_adventure_id), None)
+                        if adventure:
+                            adventure.turns_played += combat.turn_number
+                        stats = {
+                            "rooms_cleared": dungeon.rooms_cleared,
+                            "enemies_slain": adventure.enemies_slain if adventure else 0,
+                            "gold_found": dungeon.gold_collected,
+                            "turns_played": adventure.turns_played if adventure else 0,
+                        }
+                        death_narrative = await self._dm.generate_death_narrative(player, adventure, stats)
+                except Exception:
+                    pass
                 await manager.send_to(connection_id, GameMessage(
                     type=MessageType.COMBAT_UPDATE,
                     payload={
@@ -1046,6 +1166,7 @@ class GameEngine:
                         "phase": GamePhase.GAME_OVER.value,
                         "player_stats": player.stats.model_dump(),
                         "combat": _combat_to_dict(combat),
+                        "death_narrative": death_narrative,
                     }
                 ))
                 return None
@@ -1059,6 +1180,7 @@ class GameEngine:
         if combat.player_shielded_turns > 0:
             combat.player_shielded_turns -= 1
 
+        self._tick_skill_cooldowns(combat)
         combat.player_turn = True
         combat.turn_number += 1
         combat.log.extend(log)
@@ -1074,20 +1196,37 @@ class GameEngine:
         ))
         return None
 
-    def _calc_player_attack(self, player, combat: CombatState, bonus_mult: float = 1.0):
-        """Calculate player attack damage and return (damage, log_message)."""
+    def _calc_player_attack(self, player, combat: CombatState, bonus_mult: float = 1.0,
+                             damage_type: str = "physical"):
+        """Calculate player attack damage and return (damage, log_message, damage_type)."""
         base = player.stats.strength + random.randint(1, 6)
         buff = self._player_attack_buff.get(player.id, 0)
-        dmg = max(1, int((base + buff) * bonus_mult))
+        # Equipment weapon bonus
+        equip_bonus = 0
+        if player.stats.equipped.weapon:
+            tmpl = EQUIPMENT_TEMPLATES.get(player.stats.equipped.weapon, {})
+            equip_bonus = tmpl.get("damage_bonus", 0)
+            if not damage_type or damage_type == "physical":
+                damage_type = tmpl.get("damage_type", "physical")
+        dmg = max(1, int((base + buff + equip_bonus) * bonus_mult))
         target = combat.enemies[0]
-        final = max(1, dmg - target.defense)
+        # Apply type multiplier (weakness = 1.5x, resistance = 0.65x)
+        type_mult = 1.0
+        type_tag = ""
+        if target.weakness and target.weakness == damage_type:
+            type_mult = 1.5
+            type_tag = " ⚡ WEAKNESS!"
+        elif target.resistance and target.resistance == damage_type:
+            type_mult = 0.65
+            type_tag = " 🛡 RESISTED"
+        final = max(1, int(dmg * type_mult) - target.defense)
         if combat.player_stealth:
-            final = int(final * 3)
+            final = int(final * 2)
             combat.player_stealth = False
-            msg = f"STEALTH STRIKE! You deal {final} damage to {target.name}!"
+            msg = f"STEALTH STRIKE! You deal {final} {damage_type} damage to {target.name}!{type_tag}"
         else:
-            msg = f"You attack {target.name} for {final} damage."
-        return final, msg
+            msg = f"You attack {target.name} for {final} {damage_type} damage.{type_tag}"
+        return final, msg, damage_type
 
     def _apply_damage_to_enemy(self, combat: CombatState, enemy_idx: int, dmg: int):
         if enemy_idx < len(combat.enemies):
@@ -1099,7 +1238,12 @@ class GameEngine:
         reduction = 1.0
         if combat.player_shielded_turns > 0:
             reduction = 0.5
-        final = max(1, int(base * reduction))
+        # Apply equipped armor defense bonus
+        armor_bonus = 0
+        if player.stats.equipped.armor:
+            tmpl = EQUIPMENT_TEMPLATES.get(player.stats.equipped.armor, {})
+            armor_bonus = tmpl.get("defense_bonus", 0)
+        final = max(1, int(base * reduction) - armor_bonus)
         msg = f"{enemy.name} attacks you for {final} damage."
         if reduction < 1.0:
             msg += " (Shielded!)"
@@ -1113,6 +1257,12 @@ class GameEngine:
             log.append(f"Unknown skill: {skill_name}")
             return log
 
+        # Check cooldown
+        cd = combat.skill_cooldowns.get(skill_name, 0)
+        if cd > 0:
+            log.append(f"{skill['name']} is on cooldown for {cd} more turn(s)!")
+            return log
+
         mp_cost = skill.get("mp_cost", 0)
         if player.stats.mana < mp_cost:
             log.append(f"Not enough MP! (Need {mp_cost}, have {player.stats.mana})")
@@ -1120,55 +1270,201 @@ class GameEngine:
 
         player.stats.mana = max(0, player.stats.mana - mp_cost)
 
+        # Set cooldown
+        cooldown = skill.get("cooldown_turns", 0)
+        if cooldown > 0:
+            combat.skill_cooldowns[skill_name] = cooldown
+
         effect = skill.get("effect", "")
         mult = skill.get("damage_multiplier", 1.0)
+        dmg_type = skill.get("damage_type", "physical")
+        status_key = skill.get("status_effect")
 
+        # ── Heal ───────────────────────────────────────────
         if effect == "heal":
             heal = int(player.stats.max_health * skill.get("heal_percent", 0.3))
             player.stats.health = min(player.stats.max_health, player.stats.health + heal)
-            log.append(f"You cast {skill['name']} and restore {heal} HP.")
+            log.append(f"💚 You cast {skill['name']} and restore {heal} HP.")
             return log
 
+        # ── Shield ─────────────────────────────────────────
         if effect == "shield":
-            combat.player_shielded_turns = 3
-            log.append(f"You cast {skill['name']}! Damage reduced for 3 turns.")
+            combat.player_shielded_turns = 4
+            log.append(f"🛡️ You cast {skill['name']}! Damage reduced for 4 turns.")
             return log
 
+        # ── Buff Attack ────────────────────────────────────
         if effect == "buff_attack":
-            buff = 4 if skill_name in ("battle_cry", "bless") else 3
+            buff = 6 if skill_name == "berserker_rage" else 4
             self._player_attack_buff[player.id] = buff
             combat.player_buffed_turns = 3
-            log.append(f"You use {skill['name']}! Attack increased by {buff} for 3 turns.")
+            log.append(f"📣 You use {skill['name']}! Attack increased by {buff} for 3 turns.")
             return log
 
+        # ── Stealth ────────────────────────────────────────
         if effect == "stealth":
             combat.player_stealth = True
-            log.append(f"You enter stealth! Next attack will deal 3x damage.")
+            log.append(f"🌑 You vanish into shadow! Next attack deals 2x damage.")
             return log
 
+        # ── Steal / pickpocket ─────────────────────────────
+        if effect == "steal" and combat.enemies:
+            target = combat.enemies[0]
+            stolen = random.randint(3, 10)
+            player.stats.gold += stolen
+            base = player.stats.strength + self._player_attack_buff.get(player.id, 0)
+            dmg = max(1, int((base + random.randint(1, 4)) * mult) - target.defense)
+            self._apply_damage_to_enemy(combat, 0, dmg)
+            log.append(f"💰 Cheap Shot! You hit {target.name} for {dmg} damage and steal {stolen} gold!")
+            return log
+
+        # ── Execute (extra damage on low HP) ──────────────
+        if effect == "execute" and combat.enemies:
+            target = combat.enemies[0]
+            extra = 1.5 if (target.hp / target.max_hp) < 0.35 else 1.0
+            base = player.stats.strength + self._player_attack_buff.get(player.id, 0)
+            dmg = max(1, int((base + random.randint(1, 8)) * mult * extra) - target.defense)
+            self._apply_damage_to_enemy(combat, 0, dmg)
+            label = f" [EXECUTE ×{extra:.1f}]" if extra > 1.0 else ""
+            log.append(f"⚰️ Execute!{label} You deal {dmg} damage to {target.name}!")
+            if status_key:
+                self._apply_status_to_enemy(combat, target, status_key, log)
+            return log
+
+        # ── Stun ───────────────────────────────────────────
         if effect == "stun" and combat.enemies:
             target = combat.enemies[0]
             target.stunned = True
-            dmg = max(1, int((player.stats.strength * mult) + random.randint(1, 4) - target.defense))
-            if effect == "magic_damage":
-                dmg = max(1, int(player.stats.intelligence * mult + random.randint(1, 6)))
-            self._apply_damage_to_enemy(combat, 0, dmg)
-            log.append(f"You use {skill['name']}! {target.name} is stunned and takes {dmg} damage.")
+            if mult > 0:
+                base = player.stats.strength + self._player_attack_buff.get(player.id, 0)
+                dmg = max(1, int((base + random.randint(1, 4)) * mult) - target.defense)
+                self._apply_damage_to_enemy(combat, 0, dmg)
+                log.append(f"You use {skill['name']}! {target.name} is stunned and takes {dmg} damage.")
+            else:
+                log.append(f"You use {skill['name']}! {target.name} is stunned!")
+            if status_key:
+                self._apply_status_to_enemy(combat, target, status_key, log)
             return log
 
-        # Standard / magic damage
+        # ── AOE (hits all enemies) ─────────────────────────
+        if effect == "aoe" and combat.enemies:
+            total_dmg = 0
+            for idx, target in enumerate(combat.enemies):
+                is_magic = any(t in dmg_type for t in ("arcane", "fire", "holy", "shadow", "nature"))
+                if is_magic:
+                    dmg = max(1, int(player.stats.intelligence * mult + random.randint(1, 6)))
+                else:
+                    base = player.stats.strength + self._player_attack_buff.get(player.id, 0)
+                    dmg = max(1, int((base + random.randint(1, 4)) * mult) - target.defense)
+                # Type multiplier
+                if target.weakness == dmg_type:
+                    dmg = int(dmg * 1.5)
+                elif target.resistance == dmg_type:
+                    dmg = int(dmg * 0.65)
+                self._apply_damage_to_enemy(combat, idx, dmg)
+                total_dmg += dmg
+            log.append(f"🌀 {skill['name']}! You strike all enemies for {total_dmg} total {dmg_type} damage!")
+            return log
+
+        # ── Magic / Holy damage (ignores physical defense) ─
+        if effect == "magic_damage" and mult > 0 and combat.enemies:
+            target = combat.enemies[0]
+            dmg = max(1, int(player.stats.intelligence * mult + random.randint(1, 8)))
+            # Type multiplier
+            type_tag = ""
+            if target.weakness == dmg_type:
+                dmg = int(dmg * 1.5)
+                type_tag = " ⚡ WEAKNESS!"
+            elif target.resistance == dmg_type:
+                dmg = int(dmg * 0.65)
+                type_tag = " 🛡 RESISTED"
+            self._apply_damage_to_enemy(combat, 0, dmg)
+            log.append(f"You cast {skill['name']} at {target.name} for {dmg} {dmg_type} magic damage!{type_tag}")
+            if status_key:
+                self._apply_status_to_enemy(combat, target, status_key, log)
+            # Holy Nova also heals
+            if skill_name == "holy_nova":
+                heal = int(player.stats.max_health * skill.get("heal_percent", 0.10))
+                player.stats.health = min(player.stats.max_health, player.stats.health + heal)
+                log.append(f"💚 Holy light heals you for {heal} HP!")
+            return log
+
+        # ── Standard physical damage ───────────────────────
         if mult > 0 and combat.enemies:
             target = combat.enemies[0]
-            if effect == "magic_damage":
-                dmg = max(1, int(player.stats.intelligence * mult + random.randint(1, 8)))
-                log.append(f"You cast {skill['name']} at {target.name} for {dmg} magic damage!")
-            else:
-                base = player.stats.strength + self._player_attack_buff.get(player.id, 0)
-                dmg = max(1, int((base + random.randint(1, 6)) * mult) - target.defense)
-                log.append(f"You use {skill['name']}! You hit {target.name} for {dmg} damage.")
+            base = player.stats.strength + self._player_attack_buff.get(player.id, 0)
+            # Add equipped weapon bonus for physical skills
+            equip_bonus = 0
+            if player.stats.equipped.weapon:
+                equip_bonus = EQUIPMENT_TEMPLATES.get(player.stats.equipped.weapon, {}).get("damage_bonus", 0)
+            dmg = max(1, int((base + equip_bonus + random.randint(1, 6)) * mult) - target.defense)
+            type_tag = ""
+            if target.weakness == dmg_type:
+                dmg = int(dmg * 1.5)
+                type_tag = " ⚡ WEAKNESS!"
+            elif target.resistance == dmg_type:
+                dmg = int(dmg * 0.65)
+                type_tag = " 🛡 RESISTED"
             self._apply_damage_to_enemy(combat, 0, dmg)
+            log.append(f"You use {skill['name']}! You hit {target.name} for {dmg} {dmg_type} damage.{type_tag}")
+            if status_key:
+                self._apply_status_to_enemy(combat, target, status_key, log)
 
         return log
+
+    def _apply_status_to_enemy(self, combat: CombatState, target: Enemy, status_key: str, log: list):
+        """Apply a status effect to an enemy."""
+        effect_def = STATUS_EFFECTS.get(status_key)
+        if not effect_def:
+            return
+        if target.id not in combat.enemy_status_effects:
+            combat.enemy_status_effects[target.id] = []
+        # Don't stack same effect type
+        existing = [e for e in combat.enemy_status_effects[target.id] if e["type"] == status_key]
+        if not existing:
+            combat.enemy_status_effects[target.id].append({
+                "type": status_key,
+                "turns": effect_def["duration"],
+                "emoji": effect_def["emoji"],
+                "label": effect_def["label"],
+            })
+            log.append(f"{effect_def['emoji']} {target.name} is {effect_def['label']}!")
+
+    def _process_status_effects(self, combat: CombatState, player, log: list):
+        """Tick all active status effects at start of each full turn."""
+        # Player status effects
+        still_active = []
+        for eff in combat.player_status_effects:
+            dmg = STATUS_EFFECTS.get(eff["type"], {}).get("damage_per_turn", 0)
+            if dmg > 0:
+                player.stats.health = max(0, player.stats.health - dmg)
+                log.append(f"{eff['emoji']} {eff['label']}: you take {dmg} damage.")
+            eff["turns"] -= 1
+            if eff["turns"] > 0:
+                still_active.append(eff)
+            else:
+                log.append(f"{eff['label']} fades.")
+        combat.player_status_effects = still_active
+
+        # Enemy status effects
+        for enemy in combat.enemies:
+            effects = combat.enemy_status_effects.get(enemy.id, [])
+            remaining = []
+            for eff in effects:
+                dmg = STATUS_EFFECTS.get(eff["type"], {}).get("damage_per_turn", 0)
+                if dmg > 0 and enemy.hp > 0:
+                    enemy.hp = max(0, enemy.hp - dmg)
+                    log.append(f"{eff['emoji']} {enemy.name} takes {dmg} {eff['label']} damage.")
+                eff["turns"] -= 1
+                if eff["turns"] > 0:
+                    remaining.append(eff)
+            combat.enemy_status_effects[enemy.id] = remaining
+
+    def _tick_skill_cooldowns(self, combat: CombatState):
+        """Decrement all skill cooldowns by 1."""
+        combat.skill_cooldowns = {
+            k: max(0, v - 1) for k, v in combat.skill_cooldowns.items() if v > 1
+        }
 
     def _use_item_in_combat(self, player, item_id: str) -> list[str]:
         """Use an item from inventory. Returns log messages."""
@@ -1259,6 +1555,16 @@ class GameEngine:
 
         dungeon.gold_collected += total_gold
 
+        # Track adventure stats
+        adventure = next(
+            (self._adventures.get(p.current_adventure_id)
+             for p in self._parties.values() if player_id in p.member_ids
+             and p.current_adventure_id), None)
+        if adventure:
+            enemies_slain_count = len(current_room.enemies) if current_room else 0
+            adventure.enemies_slain += enemies_slain_count
+            adventure.turns_played += combat.turn_number
+
         # Check boss kill -> victory
         is_boss_room = current_room and current_room.room_type.value == "boss"
         if is_boss_room:
@@ -1271,6 +1577,26 @@ class GameEngine:
         self._player_phase[player_id] = new_phase
         del self._player_combat[player_id]
 
+        # Generate victory narrative on boss kill
+        victory_narrative = None
+        if is_boss_room and self._dm and adventure:
+            try:
+                stats = {
+                    "rooms_cleared": dungeon.rooms_cleared,
+                    "enemies_slain": adventure.enemies_slain,
+                    "gold_found": dungeon.gold_collected,
+                    "turns_played": adventure.turns_played,
+                }
+                victory_narrative = await self._dm.generate_victory_narrative(player, adventure, stats)
+            except Exception:
+                pass
+
+        # Check for level-up after XP gain
+        if adventure:
+            next_level = player.stats.level + 1
+            if next_level <= 5 and player.stats.experience >= XP_PER_LEVEL.get(next_level, 999999):
+                await self._trigger_level_up(player_id, adventure.id, manager, connection_id)
+
         await manager.send_to(connection_id, GameMessage(
             type=MessageType.COMBAT_UPDATE,
             payload={
@@ -1281,6 +1607,7 @@ class GameEngine:
                 "dungeon": _dungeon_to_dict(dungeon),
                 "xp_gained": total_xp,
                 "gold_gained": total_gold,
+                "victory_narrative": victory_narrative,
             }
         ))
 
@@ -1460,6 +1787,113 @@ class GameEngine:
         )
 
     # ============================================
+    # Progression: Level-Up & Skill Choice
+    # ============================================
+
+    async def _trigger_level_up(self, player_id: str, adventure_id: str,
+                                 manager: ConnectionManager, connection_id: str) -> None:
+        """Trigger a level-up: apply stat gains and send skill choices to client."""
+        player = self._players.get(player_id)
+        if not player:
+            return
+        new_level = player.stats.level + 1
+        player.stats.level = new_level
+        gains = LEVEL_STAT_GAINS.get(player.player_class, {})
+        hp_gain = gains.get("max_health", 5)
+        mp_gain = gains.get("max_mana", 5)
+        player.stats.max_health += hp_gain
+        player.stats.health = min(player.stats.max_health, player.stats.health + hp_gain)
+        player.stats.max_mana += mp_gain
+        player.stats.mana = min(player.stats.max_mana, player.stats.mana + mp_gain)
+        player.stats.strength += gains.get("strength", 0)
+        player.stats.intelligence += gains.get("intelligence", 0)
+        player.stats.dexterity += gains.get("dexterity", 0)
+        player.stats.charisma += gains.get("charisma", 0)
+        # Build skill choices (exclude already known)
+        unlocks = LEVEL_SKILL_UNLOCKS.get(player.player_class, {}).get(new_level, [])
+        choices = [s for s in unlocks if s not in player.skills][:3]
+        if not choices:
+            choices = list(unlocks)[:3]
+        player.stats.pending_skill_choice = bool(choices)
+        await manager.send_to(connection_id, GameMessage(
+            type=MessageType.LEVEL_UP_CHOICE,
+            payload={
+                "level": new_level,
+                "choices": choices,
+                "skill_defs": {k: SKILL_DEFINITIONS.get(k, {}) for k in choices},
+                "gains": gains,
+            }
+        ))
+
+    async def _handle_skill_chosen(
+        self,
+        connection_id: str,
+        message: GameMessage,
+        manager: ConnectionManager
+    ) -> GameMessage:
+        """Handle SKILL_CHOSEN: add the chosen skill to the player."""
+        player_id = self._connection_to_player.get(connection_id)
+        if not player_id:
+            return GameMessage(type=MessageType.ERROR, payload={"error": "Not connected"})
+        player = self._players.get(player_id)
+        if not player:
+            return GameMessage(type=MessageType.ERROR, payload={"error": "Player not found"})
+        skill_name = message.payload.get("skill", "")
+        if skill_name and skill_name not in player.skills:
+            player.skills.append(skill_name)
+        player.stats.pending_skill_choice = False
+        skill_display = SKILL_DEFINITIONS.get(skill_name, {}).get("name", skill_name)
+        return GameMessage(
+            type=MessageType.SUCCESS,
+            payload={
+                "message": f"You learned {skill_display}!",
+                "skill": skill_name,
+                "player_stats": player.stats.model_dump(),
+                "skills": player.skills,
+            }
+        )
+
+    # ============================================
+    # Equipment
+    # ============================================
+
+    async def _handle_equip_item(
+        self,
+        connection_id: str,
+        message: GameMessage,
+        manager: ConnectionManager
+    ) -> GameMessage:
+        """Handle EQUIP_ITEM: equip an item from the player's inventory."""
+        player_id = self._connection_to_player.get(connection_id)
+        if not player_id:
+            return GameMessage(type=MessageType.ERROR, payload={"error": "Not connected"})
+        player = self._players.get(player_id)
+        if not player:
+            return GameMessage(type=MessageType.ERROR, payload={"error": "Player not found"})
+        item_key = message.payload.get("item_key", "")
+        template = EQUIPMENT_TEMPLATES.get(item_key)
+        if not template:
+            return GameMessage(type=MessageType.ERROR, payload={"error": "Unknown item"})
+        if item_key not in player.inventory:
+            return GameMessage(type=MessageType.ERROR, payload={"error": "Item not in inventory"})
+        slot = template.get("slot", "weapon")  # "weapon", "armor", or "accessory"
+        old_item = getattr(player.stats.equipped, slot, None)
+        if old_item:
+            player.inventory.append(old_item)
+        setattr(player.stats.equipped, slot, item_key)
+        player.inventory.remove(item_key)
+        return GameMessage(
+            type=MessageType.SUCCESS,
+            payload={
+                "message": f"Equipped {template['name']}!",
+                "item_key": item_key,
+                "slot": slot,
+                "player_stats": player.stats.model_dump(),
+                "inventory": player.inventory,
+            }
+        )
+
+    # ============================================
     # Game Clock
     # ============================================
 
@@ -1518,4 +1952,7 @@ def _combat_to_dict(combat: CombatState) -> dict:
         "player_buffed_turns": combat.player_buffed_turns,
         "player_shielded_turns": combat.player_shielded_turns,
         "player_stealth": combat.player_stealth,
+        "skill_cooldowns": dict(combat.skill_cooldowns),
+        "player_status_effects": list(combat.player_status_effects),
+        "enemy_status_effects": {k: list(v) for k, v in combat.enemy_status_effects.items()},
     }

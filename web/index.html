@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Cinzel+Decorative:wght@400;700&family=Roboto+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <link rel="stylesheet" href="/static/app.css?v=8" />
+  <link rel="stylesheet" href="/static/app.css?v=9" />
 </head>
 <body>
   <div id="app">
@@ -58,6 +58,9 @@
             <span class="spinner"></span>
             <span id="login-status-text">Connecting...</span>
           </div>
+
+          <!-- Returning adventurer card (shown by JS if localStorage profile exists) -->
+          <div id="returning-adventurer" style="display:none"></div>
         </div>
       </div>
     </div>
@@ -481,6 +484,6 @@
   </div><!-- end #app -->
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="/static/js/bundle.js?v=25"></script>
+  <script src="/static/js/bundle.js?v=26"></script>
 </body>
 </html>

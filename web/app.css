@@ -1623,3 +1623,134 @@ html, body {
   position:absolute; inset:0; pointer-events:none; overflow:hidden; z-index:2;
 }
 
+
+/* ═══════════════════════════════════════════════════════
+   AAA ELEVATION — Phase 1-5 Additions
+   ═══════════════════════════════════════════════════════ */
+
+/* ── Skill Cooldown Overlay ── */
+.skill-btn { position:relative; }
+.skill-btn.on-cooldown { opacity:0.5; cursor:not-allowed; }
+.skill-cooldown-overlay {
+  position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+  background:rgba(0,0,0,0.65); border-radius:inherit;
+  font-family:var(--font-title); font-size:18px; font-weight:700; color:var(--red);
+  pointer-events:none;
+}
+
+/* ── Status Effect Badges on Enemies ── */
+.status-badges { display:flex; gap:4px; flex-wrap:wrap; margin-top:4px; }
+.status-badge {
+  font-size:11px; padding:2px 6px; border-radius:10px;
+  background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.12);
+  color:var(--text); white-space:nowrap;
+}
+
+/* ── Boss Phase 2 ── */
+.enemy-card.phase2 { border-color:var(--red) !important; box-shadow:0 0 12px rgba(212,69,62,0.3); }
+.boss-phase2-banner {
+  position:fixed; top:80px; left:50%; transform:translateX(-50%);
+  z-index:9500; background:var(--red-dim); border:2px solid var(--red);
+  border-radius:10px; padding:16px 32px; text-align:center;
+  animation:phase2-in 0.4s cubic-bezier(0.34,1.4,0.64,1);
+  transition:opacity 0.6s;
+}
+.bp2-title { font-family:var(--font-title); font-size:22px; color:var(--red); letter-spacing:0.1em; }
+.bp2-ability { font-size:12px; color:var(--text-muted); margin-top:6px; }
+@keyframes phase2-in { from{opacity:0;transform:translateX(-50%) scale(0.8)} to{opacity:1;transform:translateX(-50%) scale(1)} }
+
+/* ── NPC Encounter Banner ── */
+.npc-encounter-banner {
+  border:1px solid var(--amber); border-radius:8px; padding:12px 16px;
+  background:rgba(201,168,76,0.06); margin-bottom:8px;
+  animation:npc-slide-in 0.4s ease;
+}
+.npc-banner-header { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+.npc-banner-emoji { font-size:20px; }
+.npc-banner-name { font-family:var(--font-title); font-size:14px; font-weight:700; }
+.npc-banner-role { font-size:11px; color:var(--text-muted); }
+.npc-banner-line { font-size:13px; font-style:italic; color:var(--text); margin-bottom:4px; }
+.npc-banner-tip { font-size:11px; color:var(--amber); }
+@keyframes npc-slide-in { from{opacity:0;transform:translateY(-8px)} to{opacity:1;transform:translateY(0)} }
+
+/* ── Skill Choice Overlay ── */
+.skill-choice-cards { display:flex; gap:16px; flex-wrap:wrap; justify-content:center; padding:0 20px; max-width:860px; }
+.skill-choice-card {
+  background:var(--surface); border:1px solid var(--border2); border-radius:12px;
+  padding:20px 18px; width:220px; text-align:center; cursor:pointer;
+  transition:border-color 0.2s, box-shadow 0.2s;
+}
+.skill-choice-card:hover { border-color:var(--amber); box-shadow:0 0 20px rgba(201,168,76,0.2); }
+.scc-emoji { font-size:36px; margin-bottom:8px; }
+.scc-name { font-family:var(--font-title); font-size:16px; color:var(--gold2); margin-bottom:6px; }
+.scc-badges { display:flex; gap:6px; justify-content:center; margin-bottom:6px; }
+.skill-dtype-badge { font-size:10px; padding:2px 6px; border-radius:8px; background:var(--purple-dim); color:var(--purple); }
+.skill-cd-badge { font-size:10px; padding:2px 6px; border-radius:8px; background:var(--amber-dim); color:var(--amber); }
+.scc-mp { font-size:12px; color:var(--purple); margin-bottom:8px; }
+.scc-desc { font-size:12px; color:var(--text-muted); line-height:1.5; margin-bottom:14px; }
+.scc-pick { width:100%; }
+
+/* ── Game End Overlays (Death + Victory) ── */
+.game-end-overlay {
+  position:fixed; inset:0; z-index:9800; display:flex; flex-direction:column;
+  align-items:center; justify-content:center; padding:32px 20px;
+  text-align:center; animation:end-overlay-in 0.8s ease;
+}
+@keyframes end-overlay-in { from{opacity:0} to{opacity:1} }
+
+.game-over-overlay { background:radial-gradient(ellipse at center, #2a0808 0%, #0a0303 60%, #000 100%); }
+.victory-overlay   { background:radial-gradient(ellipse at center, #1a1200 0%, #0a0800 60%, #000 100%); }
+
+.geo-title {
+  font-family:var(--font-title); font-size:52px; letter-spacing:0.2em;
+  margin-bottom:20px; text-shadow:0 0 40px currentColor;
+}
+.game-over-overlay .geo-title { color:var(--red); }
+.victory-overlay   .geo-title { color:var(--gold2); }
+
+.geo-narrative {
+  font-size:15px; font-style:italic; color:var(--text); line-height:1.7;
+  max-width:480px; margin-bottom:28px; min-height:60px;
+}
+.geo-stats {
+  display:flex; gap:24px; flex-wrap:wrap; justify-content:center; margin-bottom:32px;
+}
+.geo-stat {
+  display:flex; flex-direction:column; align-items:center; gap:4px;
+  font-family:var(--font-title);
+}
+.geo-stat-icon { font-size:22px; }
+.geo-stat span:nth-child(2) { font-size:24px; color:var(--gold2); }
+.geo-stat span:nth-child(3) { font-size:10px; color:var(--text-muted); letter-spacing:0.1em; text-transform:uppercase; }
+
+/* ── Returning Adventurer Card ── */
+#returning-adventurer {
+  margin-top:16px; padding:12px 18px; border:1px solid var(--amber);
+  border-radius:8px; background:rgba(201,168,76,0.06);
+  text-align:center; animation:npc-slide-in 0.4s ease;
+}
+.ra-greeting { font-family:var(--font-title); font-size:14px; color:var(--gold2); margin-bottom:4px; }
+.ra-last { font-size:12px; color:var(--text-muted); }
+
+/* ── Equipment UI in Inventory ── */
+.inv-equipped-section { margin-bottom:12px; }
+.inv-section-title { font-size:10px; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.12em; margin-bottom:6px; }
+.equip-slot { display:flex; align-items:center; gap:8px; padding:5px 0; border-bottom:1px solid var(--border); }
+.equip-slot-label { font-size:10px; color:var(--text-muted); width:70px; text-transform:uppercase; }
+.equip-slot-item { font-size:12px; }
+.equip-slot-item.equipped { color:var(--amber); }
+.equip-slot-item.empty { color:var(--border2); }
+.inv-item-row { display:flex; align-items:center; gap:8px; padding:5px 0; border-bottom:1px solid var(--border); }
+.inv-item-emoji { font-size:16px; }
+.inv-item-name { flex:1; font-size:13px; }
+.btn-equip {
+  font-size:11px; padding:3px 10px; border:1px solid var(--amber); border-radius:6px;
+  background:transparent; color:var(--amber); cursor:pointer;
+}
+.btn-equip:hover { background:rgba(201,168,76,0.12); }
+
+/* ── Rarity colors ── */
+.rarity-common    { color:#aaa; }
+.rarity-uncommon  { color:#43a047; }
+.rarity-rare      { color:var(--purple); }
+.rarity-legendary { color:var(--gold2); text-shadow:0 0 8px var(--gold); }

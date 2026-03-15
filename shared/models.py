@@ -66,6 +66,19 @@ class MessageType(str, Enum):
     DICE_ROLL_REQUIRED = "dice_roll_required"
     DICE_RESULT = "dice_result"
 
+    # Progression
+    LEVEL_UP_CHOICE = "level_up_choice"
+    SKILL_CHOSEN = "skill_chosen"
+
+    # Equipment
+    EQUIP_ITEM = "equip_item"
+
+    # Boss phases
+    BOSS_PHASE_2 = "boss_phase_2"
+
+    # Story / NPC
+    NPC_ENCOUNTER = "npc_encounter"
+
     # DM configuration
     DM_CONFIG = "dm_config"
 
@@ -107,6 +120,13 @@ class PlayerClass(str, Enum):
     RANGER = "ranger"
 
 
+class EquippedItems(BaseModel):
+    """Currently equipped items (by equipment template key)."""
+    weapon: Optional[str] = None
+    armor: Optional[str] = None
+    accessory: Optional[str] = None
+
+
 class PlayerStats(BaseModel):
     """Core player statistics."""
     health: int = 100
@@ -120,6 +140,8 @@ class PlayerStats(BaseModel):
     level: int = 1
     experience: int = 0
     gold: int = 0
+    pending_skill_choice: bool = False
+    equipped: EquippedItems = Field(default_factory=EquippedItems)
 
 
 class Player(BaseModel):
@@ -179,6 +201,11 @@ class Adventure(BaseModel):
     # Rolling conversation log: list of {"role": "user"|"assistant", "content": str}
     # Kept to last 30 turns to avoid ballooning token usage
     conversation_log: list[dict] = Field(default_factory=list)
+    # Story / quest tracking
+    met_npcs: list[str] = Field(default_factory=list)
+    tome_fragments_found: int = 0
+    enemies_slain: int = 0
+    turns_played: int = 0
 
 
 # ============================================
@@ -265,6 +292,10 @@ class Enemy(BaseModel):
     gold_reward: int
     is_boss: bool = False
     stunned: bool = False  # Misses next attack if True
+    weakness: Optional[str] = None   # damage type that deals 1.5x
+    resistance: Optional[str] = None # damage type that deals 0.65x
+    boss_phase: int = 1              # 1 = normal, 2 = enraged
+    template_key: Optional[str] = None  # original template key for boss phase data
 
 
 class RoomType(str, Enum):
@@ -313,4 +344,10 @@ class CombatState(BaseModel):
     log: list[str] = Field(default_factory=list)
     player_buffed_turns: int = 0    # Turns of active buff (e.g. Battle Cry)
     player_shielded_turns: int = 0  # Turns of active shield
-    player_stealth: bool = False    # Rogue stealth - next hit does 3x damage
+    player_stealth: bool = False    # Rogue stealth - next hit does 2x damage
+    # Skill cooldowns: skill_name -> turns remaining
+    skill_cooldowns: dict[str, int] = Field(default_factory=dict)
+    # Status effects on player: list of {"type": str, "turns": int, ...}
+    player_status_effects: list[dict] = Field(default_factory=list)
+    # Status effects on enemies: enemy_id -> list of effects
+    enemy_status_effects: dict[str, list] = Field(default_factory=dict)

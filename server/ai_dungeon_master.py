@@ -363,3 +363,91 @@ Make it atmospheric and potentially hook the players' interest."""
         except Exception as e:
             logger.error(f"Error generating event: {e}")
             return f"[A {event_type} event occurs: {context}]"
+
+    async def generate_death_narrative(self, player, adventure, stats: dict) -> str:
+        """Generate a dramatic, class-appropriate death narrative."""
+        cls = getattr(player, 'player_class', 'warrior')
+        cls_str = cls.value if hasattr(cls, 'value') else str(cls)
+        prompt = (
+            f"The {cls_str} named {player.name} has fallen in battle.\n"
+            f"Adventure: {adventure.name}\n"
+            f"Stats: {stats.get('rooms_cleared',0)} rooms cleared, "
+            f"{stats.get('enemies_slain',0)} enemies slain, "
+            f"{stats.get('gold_found',0)} gold found, "
+            f"{stats.get('turns_played',0)} turns survived.\n\n"
+            "Write a 3-sentence death narrative that is dramatic, class-appropriate, "
+            "and honors the player's journey. End with a haunting final image. "
+            "Do NOT mention stats or numbers directly — make it poetic."
+        )
+        try:
+            response = self._client.messages.create(
+                model=self._model, max_tokens=150,
+                system=build_system_prompt(dungeon_name=adventure.name,
+                    personality=self._personality, personality_notes=self._personality_notes),
+                messages=[{"role": "user", "content": prompt}]
+            )
+            return response.content[0].text
+        except Exception as e:
+            logger.error(f"Death narrative error: {e}")
+            class_deaths = {
+                "warrior": "The warrior falls, shield arm outstretched, defiant to the last breath.",
+                "mage": "The mage's last spell unravels into silence, arcane light fading from their eyes.",
+                "rogue": "The rogue vanishes into shadow — this time, they don't return.",
+                "cleric": "The cleric's prayer ends mid-word. The gods remain silent.",
+                "ranger": "The ranger's final arrow flies true — but it is not enough.",
+            }
+            return class_deaths.get(cls_str, "The adventurer falls, their story unfinished.")
+
+    async def generate_victory_narrative(self, player, adventure, stats: dict) -> str:
+        """Generate a triumphant victory narrative."""
+        cls = getattr(player, 'player_class', 'warrior')
+        cls_str = cls.value if hasattr(cls, 'value') else str(cls)
+        prompt = (
+            f"The {cls_str} named {player.name} has conquered the dungeon!\n"
+            f"Adventure: {adventure.name}\n"
+            f"They reached level {player.stats.level}, cleared {stats.get('rooms_cleared',0)} rooms, "
+            f"slew {stats.get('enemies_slain',0)} enemies, and found {stats.get('gold_found',0)} gold.\n\n"
+            "Write a 3-sentence victory narrative that is triumphant but bittersweet — "
+            "the Veil still exists, the Archivist still stirs. The battle is won, not the war. "
+            "End with a sense of the journey continuing."
+        )
+        try:
+            response = self._client.messages.create(
+                model=self._model, max_tokens=150,
+                system=build_system_prompt(dungeon_name=adventure.name,
+                    personality=self._personality, personality_notes=self._personality_notes),
+                messages=[{"role": "user", "content": prompt}]
+            )
+            return response.content[0].text
+        except Exception as e:
+            logger.error(f"Victory narrative error: {e}")
+            return (
+                f"{player.name} stands victorious over the fallen. "
+                "The dungeon is cleared, but the city still breathes with shadow. "
+                "Somewhere, the Archivist stirs — and takes note of your name."
+            )
+
+    async def narrate_npc_encounter(self, player, adventure, npc: dict, room_name: str) -> str:
+        """Generate dynamic NPC encounter narrative."""
+        cls = getattr(player, 'player_class', 'warrior')
+        cls_str = cls.value if hasattr(cls, 'value') else str(cls)
+        prompt = (
+            f"The {cls_str} {player.name} encounters {npc['name']} ({npc['role']}) "
+            f"at {room_name}.\n"
+            f"Their opening line: \"{npc['first_encounter']}\"\n"
+            f"Campaign context: {npc.get('tip', 'They seem to know something.')}\n\n"
+            "Expand this into a 2-3 sentence scene description that sets the mood before "
+            "the NPC speaks. Then write their opening line verbatim. "
+            "Make the setting feel real and tense."
+        )
+        try:
+            response = self._client.messages.create(
+                model=self._model, max_tokens=200,
+                system=build_system_prompt(dungeon_name=adventure.name,
+                    personality=self._personality, personality_notes=self._personality_notes),
+                messages=[{"role": "user", "content": prompt}]
+            )
+            return response.content[0].text
+        except Exception as e:
+            logger.error(f"NPC narrative error: {e}")
+            return f"{npc['name']} appears. {npc['first_encounter']}"
