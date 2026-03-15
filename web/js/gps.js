@@ -117,6 +117,24 @@ export function getPosition() {
 
 export function isManual() { return _state.manual; }
 export function isSimulating() { return _state.simulating; }
+export function isGPSActive() { return _state.watchId !== null && !_state.manual; }
+
+/**
+ * Auto-detect approximate location via IP geolocation (no permissions needed).
+ * Uses ip-api.com — free, no API key, works on any desktop.
+ * Returns { lat, lng, city, country } or null on failure.
+ */
+export async function getIPGeolocation() {
+  try {
+    const r = await fetch('http://ip-api.com/json/?fields=lat,lon,city,country,status', { cache: 'no-store' });
+    if (!r.ok) throw new Error('non-200');
+    const d = await r.json();
+    if (d.status !== 'success') throw new Error('ip-api fail');
+    return { lat: d.lat, lng: d.lon, city: d.city, country: d.country };
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Check whether the player is close enough to a target location.
