@@ -121,19 +121,33 @@ export function isGPSActive() { return _state.watchId !== null && !_state.manual
 
 /**
  * Auto-detect approximate location via IP geolocation (no permissions needed).
- * Uses ip-api.com — free, no API key, works on any desktop.
- * Returns { lat, lng, city, country } or null on failure.
+ * Tries two HTTPS services in sequence; returns { lat, lng, city } or null.
  */
 export async function getIPGeolocation() {
+  // ipapi.co — HTTPS, free, no key required
   try {
-    const r = await fetch('http://ip-api.com/json/?fields=lat,lon,city,country,status', { cache: 'no-store' });
-    if (!r.ok) throw new Error('non-200');
-    const d = await r.json();
-    if (d.status !== 'success') throw new Error('ip-api fail');
-    return { lat: d.lat, lng: d.lon, city: d.city, country: d.country };
-  } catch {
-    return null;
-  }
+    const r = await fetch('https://ipapi.co/json/', { cache: 'no-store' });
+    if (r.ok) {
+      const d = await r.json();
+      if (d.latitude && d.longitude) {
+        return { lat: d.latitude, lng: d.longitude, city: d.city || d.region || '' };
+      }
+    }
+  } catch { /* fall through */ }
+
+  // ipinfo.io — HTTPS fallback
+  try {
+    const r = await fetch('https://ipinfo.io/json', { cache: 'no-store' });
+    if (r.ok) {
+      const d = await r.json();
+      if (d.loc) {
+        const [lat, lng] = d.loc.split(',').map(Number);
+        return { lat, lng, city: d.city || '' };
+      }
+    }
+  } catch { /* fall through */ }
+
+  return null;
 }
 
 /**

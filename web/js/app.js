@@ -1284,32 +1284,43 @@ async function geocodePlace(query) {
 }
 
 async function initGPS() {
-  // 1. Try real GPS first (mobile / laptop with GPS chip)
-  try {
-    await startWatching();
+  // Fire GPS watch and IP lookup in parallel — whichever wins first wins.
+  // GPS watch stays running in background (useful on mobile later).
+  // IP lookup is instant on desktop and doesn't need any permission.
+
+  let gpsResolved = false;
+
+  // Background GPS (fires if available, stays watching)
+  startWatching().then(() => {
+    gpsResolved = true;
     _gpsReady = true;
     renderGPSIndicator();
-    updateLocationWidget(`📍 GPS active`, 'GPS');
-    return;
-  } catch {
-    // GPS not available or denied — fall through to IP
-  }
+    updateLocationWidget('📍 GPS active', 'GPS');
+    if (laMap) {
+      const pos = getPosition();
+      if (pos) laMap.updatePlayerPosition(pos.lat, pos.lng);
+    }
+  }).catch(() => { /* GPS unavailable on this device — that's fine */ });
 
-  // 2. IP geolocation — silent, works on any desktop, no permission
+  // IP geolocation — runs immediately, resolves in < 1 second typically
   const ip = await getIPGeolocation();
-  if (ip) {
+
+  if (ip && !gpsResolved) {
     setManualPosition(ip.lat, ip.lng);
-    enableSimulateTravel(); // desktop: no proximity gate by default
+    enableSimulateTravel(); // desktop default: no proximity gate
     _gpsReady = true;
     renderGPSIndicator();
-    updateLocationWidget(`${ip.city || 'Detected location'} (${ip.lat.toFixed(3)}, ${ip.lng.toFixed(3)})`, 'IP');
+    const label = ip.city ? `${ip.city} (${ip.lat.toFixed(3)}, ${ip.lng.toFixed(3)})` : `${ip.lat.toFixed(3)}, ${ip.lng.toFixed(3)}`;
+    updateLocationWidget(label, 'IP');
     return;
   }
 
-  // 3. Nothing worked — prompt user to type a location
-  _gpsReady = false;
-  renderGPSIndicator();
-  updateLocationWidget('Could not detect location — please set it manually', '');
+  if (!ip && !gpsResolved) {
+    // Nothing worked yet — GPS still trying, prompt manual entry
+    _gpsReady = false;
+    renderGPSIndicator();
+    updateLocationWidget('Could not detect — enter your location below', '');
+  }
 }
 
 function updateLocationWidget(statusText, source) {
