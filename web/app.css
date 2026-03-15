@@ -518,20 +518,21 @@ html, body {
 /* Fullscreen map overlay */
 .map-panel--expanded {
   position: fixed !important;
-  inset: 0;
+  top: 0 !important; left: 0 !important;
+  width: 100vw !important; height: 100vh !important;
   z-index: 8000;
   border-radius: 0 !important;
-  display: flex;
+  display: flex !important;
   flex-direction: column;
   background: var(--bg);
 }
+/* Leaflet requires explicit pixel height — calc it from viewport minus header */
 .map-panel--expanded #la-map {
-  flex: 1;
-  height: auto !important;
+  height: calc(100vh - 56px) !important;
   border-radius: 0;
 }
-.map-panel--expanded .panel-header { border-radius: 0; }
-.map-panel--expanded .map-legend { padding: 8px 12px; }
+.map-panel--expanded .panel-header { border-radius: 0; flex-shrink: 0; }
+.map-panel--expanded .map-legend { flex-shrink: 0; padding: 6px 12px; }
 .map-legend {
   display: flex; gap: 8px; flex-wrap: wrap;
   padding: 6px 10px;
