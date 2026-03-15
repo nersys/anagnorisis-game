@@ -526,11 +526,46 @@ function _gpsEmit() {
 function ps(player) { return (player && player.stats) ? player.stats : (player || {}); }
 
 const CLASSES = {
-  warrior: { emoji: '⚔️', name: 'Warrior', tag: 'Tank & Brawler', color: '#e53935' },
-  mage:    { emoji: '🔮', name: 'Mage',    tag: 'Arcane Power',  color: '#7c3aed' },
-  rogue:   { emoji: '🗡️', name: 'Rogue',   tag: 'Swift & Deadly', color: '#1e88e5' },
-  cleric:  { emoji: '✨', name: 'Cleric',  tag: 'Divine Healer', color: '#f0cc6a' },
-  ranger:  { emoji: '🏹', name: 'Ranger',  tag: 'Eagle Eye',     color: '#43a047' },
+  warrior: {
+    emoji: '⚔️', figure: '🪖', weapon: '🗡️',
+    name: 'Warrior', tag: 'Iron & Blood',
+    color: '#e53935', colorDim: 'rgba(229,57,53,0.15)',
+    lore: 'Forged in countless battles, the Warrior is an unstoppable force on the front lines. High HP, powerful strikes, and unyielding armor make every foe tremble.',
+    stats: { str: 5, int: 1, dex: 3, hp: 5 },
+    anim: 'warrior-float',
+  },
+  mage: {
+    emoji: '🔮', figure: '🧙', weapon: '✨',
+    name: 'Mage', tag: 'Arcane Sovereign',
+    color: '#9060e0', colorDim: 'rgba(144,96,224,0.15)',
+    lore: 'Master of the arcane arts, the Mage bends reality with devastating spells. Fragile in body but immense in power — one fireball changes everything.',
+    stats: { str: 1, int: 5, dex: 2, hp: 2 },
+    anim: 'mage-pulse',
+  },
+  rogue: {
+    emoji: '🗡️', figure: '🥷', weapon: '💨',
+    name: 'Rogue', tag: 'Shadow & Steel',
+    color: '#d4a54a', colorDim: 'rgba(212,165,74,0.15)',
+    lore: 'From the shadows, the Rogue strikes swiftly and vanishes. High critical chance, poison mastery, and unmatched agility make them deadly in any dungeon.',
+    stats: { str: 3, int: 2, dex: 5, hp: 3 },
+    anim: 'rogue-flicker',
+  },
+  cleric: {
+    emoji: '✨', figure: '🧝', weapon: '🙏',
+    name: 'Cleric', tag: 'Light of the Divine',
+    color: '#f0cc6a', colorDim: 'rgba(240,204,106,0.15)',
+    lore: 'Blessed by the gods, the Cleric heals wounds that would fell any warrior. Divine smites and protective auras make them invaluable in any fellowship.',
+    stats: { str: 2, int: 4, dex: 2, hp: 4 },
+    anim: 'cleric-glow',
+  },
+  ranger: {
+    emoji: '🏹', figure: '🧙‍♀️', weapon: '🌿',
+    name: 'Ranger', tag: 'Eyes of the Wild',
+    color: '#43a047', colorDim: 'rgba(67,160,71,0.15)',
+    lore: 'One with nature and the wilderness, the Ranger never misses. Expert tracking, precise arrows, and animal companions make the dungeon their domain.',
+    stats: { str: 3, int: 3, dex: 4, hp: 3 },
+    anim: 'ranger-sway',
+  },
 };
 
 const SKILLS = {
@@ -678,16 +713,32 @@ function showScreen(name) {
 // ═══════════════════════════════════════════════════════
 
 function initLogin() {
-  // Render class cards FIRST — particles are optional eye candy
+  // Render animated class portrait cards
   const grid = document.getElementById('class-grid');
-  grid.innerHTML = Object.entries(CLASSES).map(([key, cls]) => `
+  grid.innerHTML = Object.entries(CLASSES).map(([key, cls]) => {
+    const statBar = (v, max=5) => `<div class="cls-stat-bar"><div class="cls-stat-fill" style="width:${(v/max)*100}%;background:${cls.color}"></div></div>`;
+    return `
     <div class="class-card ${key === selectedClass ? 'selected' : ''}"
-         data-class="${key}" style="--class-color:${cls.color}">
-      <span class="class-emoji">${cls.emoji}</span>
-      <span class="class-name">${cls.name}</span>
-      <span class="class-tag">${cls.tag}</span>
-    </div>
-  `).join('');
+         data-class="${key}"
+         style="--class-color:${cls.color};--class-color-dim:${cls.colorDim}">
+      <div class="class-portrait">
+        <div class="class-portrait-aura"></div>
+        <div class="class-figure ${cls.anim}">${cls.figure}</div>
+        <div class="class-weapon">${cls.weapon}</div>
+      </div>
+      <div class="class-info">
+        <span class="class-name">${cls.name}</span>
+        <span class="class-tag">${cls.tag}</span>
+        <div class="class-lore">${cls.lore}</div>
+        <div class="class-stats">
+          <div class="cls-stat-row"><span>STR</span>${statBar(cls.stats.str)}</div>
+          <div class="cls-stat-row"><span>INT</span>${statBar(cls.stats.int)}</div>
+          <div class="cls-stat-row"><span>DEX</span>${statBar(cls.stats.dex)}</div>
+          <div class="cls-stat-row"><span>HP</span>${statBar(cls.stats.hp)}</div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
 
   grid.querySelectorAll('.class-card').forEach(card => {
     card.addEventListener('click', () => {
