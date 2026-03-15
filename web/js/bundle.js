@@ -1326,27 +1326,35 @@ function initGame() {
     }
   });
 
-  // ── Music: Spotify embed widget ──
-  // Dark fantasy RPG ambient playlist — change SPOTIFY_PLAYLIST_ID to use your own
-  const SPOTIFY_PLAYLIST_ID = '37i9dQZF1DX8vZlsdZPjzn'; // "Epic & Dramatic" — works well for RPG
+  // ── Music: YouTube ambient embed ──
+  // Dark fantasy RPG ambient — hours-long atmospheric track embedded via YouTube
+  // Video ID can be overridden via appConfig.ambient_yt_id
+  const DEFAULT_AMBIENT_YT = 'HGl9nhFkj9k'; // "Dark Souls / Hollow Knight style ambience" mix
   let spotifyOpen = false;
   let spotifyEl = null;
 
   function createSpotifyWidget() {
+    const ytId = (appConfig && appConfig.ambient_yt_id) || DEFAULT_AMBIENT_YT;
     const el = document.createElement('div');
     el.id = 'spotify-widget';
     el.style.cssText = `
       position:fixed; bottom:60px; right:16px; z-index:9999;
-      width:300px; border-radius:12px; overflow:hidden;
+      width:280px; border-radius:12px; overflow:hidden;
       box-shadow:0 8px 32px rgba(0,0,0,0.8);
-      border:1px solid rgba(201,168,76,0.2);
+      border:1px solid rgba(201,168,76,0.25);
+      background:#0d0b06;
     `;
     el.innerHTML = `
+      <div style="padding:8px 10px 4px;display:flex;align-items:center;justify-content:space-between">
+        <span style="font-family:var(--font-title);font-size:10px;color:#866a30;letter-spacing:0.1em">🎵 AMBIENT</span>
+        <button onclick="(function(){var w=document.getElementById('spotify-widget');if(w)w.style.display='none';var b=document.getElementById('btn-music-toggle');if(b){b.textContent='🔇';b.title='Show ambient music';}})();"
+          style="background:none;border:none;color:#554433;cursor:pointer;font-size:13px;padding:0;line-height:1">✕</button>
+      </div>
       <iframe
-        src="https://open.spotify.com/embed/playlist/${SPOTIFY_PLAYLIST_ID}?utm_source=generator&theme=0"
-        width="300" height="152" frameborder="0"
-        allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
-        loading="lazy">
+        src="https://www.youtube.com/embed/${ytId}?autoplay=1&loop=1&playlist=${ytId}&controls=1&modestbranding=1&rel=0"
+        width="280" height="158" frameborder="0"
+        allow="autoplay; encrypted-media"
+        allowfullscreen loading="lazy">
       </iframe>
     `;
     document.body.appendChild(el);
