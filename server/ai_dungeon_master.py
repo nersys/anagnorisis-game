@@ -113,15 +113,21 @@ Write an atmospheric opening that:
 Keep it to 2-3 paragraphs. Name-drop the real places with fantasy names. Be cinematic and urgent."""
 
         try:
+            # Use full lore for the intro so the DM knows the campaign arc from the start
+            system = build_system_prompt(
+                dungeon_name=adventure.name,
+                personality=self._personality,
+                personality_notes=self._personality_notes,
+                include_full_lore=True,
+            )
             response = self._client.messages.create(
                 model=self._model,
                 max_tokens=1024,
-                system=SYSTEM_PROMPTS.get(adventure.mode, SYSTEM_PROMPTS[AdventureMode.GUIDED]),
+                system=system,
                 messages=[{"role": "user", "content": prompt}]
             )
-            
             return response.content[0].text
-            
+
         except APIError as e:
             logger.error(f"API error generating intro: {e}")
             return self._fallback_intro(adventure)
@@ -291,10 +297,14 @@ Perhaps try again, or attempt something else while the cosmic threads realign.""
         )
 
         try:
+            system = build_system_prompt(
+                personality=self._personality,
+                personality_notes=self._personality_notes,
+            )
             response = self._client.messages.create(
                 model=self._model,
                 max_tokens=256,
-                system="You are a Dungeon Master writing atmospheric room descriptions for a fantasy dungeon crawler game. Be vivid but concise.",
+                system=system,
                 messages=[{"role": "user", "content": prompt}],
             )
             return response.content[0].text
@@ -325,7 +335,11 @@ Make it atmospheric and potentially hook the players' interest."""
             response = self._client.messages.create(
                 model=self._model,
                 max_tokens=512,
-                system=SYSTEM_PROMPTS.get(adventure.mode, SYSTEM_PROMPTS[AdventureMode.GUIDED]),
+                system=build_system_prompt(
+                    dungeon_name=adventure.name,
+                    personality=self._personality,
+                    personality_notes=self._personality_notes,
+                ),
                 messages=[{"role": "user", "content": prompt}]
             )
             

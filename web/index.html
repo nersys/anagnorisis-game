@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Cinzel+Decorative:wght@400;700&family=Roboto+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <link rel="stylesheet" href="/static/app.css?v=6" />
+  <link rel="stylesheet" href="/static/app.css?v=7" />
 </head>
 <body>
   <div id="app">
@@ -250,6 +250,13 @@
           <div class="action-bar" id="action-bar">
             <!-- Populated by JS based on phase -->
           </div>
+
+          <!-- Player Action Input — always visible, lets player respond to DM freely -->
+          <div class="player-input-row" id="player-input-row">
+            <input id="player-action-input" class="form-input player-action-input"
+              type="text" placeholder="What do you do? (type freely or use buttons above…)" maxlength="220" />
+            <button id="btn-player-action-send" class="btn btn-accent btn-sm" title="Send action">➤</button>
+          </div>
         </div>
 
 
@@ -456,6 +463,6 @@
   </div><!-- end #app -->
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="/static/js/bundle.js?v=21"></script>
+  <script src="/static/js/bundle.js?v=22"></script>
 </body>
 </html>

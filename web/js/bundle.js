@@ -263,7 +263,7 @@ class LAMap {
     this.map = null;
     this.markers = {};
     this.lines = [];
-    this.playerDot = null;         // blue GPS dot
+    this.playerDot = null;         // GPS dot
     this.proximityCircle = null;   // 80 m ring around player
     this.roomLocations = {};  // roomId → [lat, lng]
     this.roomNames = {};      // roomId → real location name
@@ -271,6 +271,8 @@ class LAMap {
     this._assigned = false;
     this._poiMode = false;         // true when rooms carry real lat/lng
     this.onRoomClick = null;  // callback(roomId)
+    this._poiLayer = null;         // full discovery POI layer
+    this._poiFetched = false;
   }
 
   init() {
@@ -374,10 +376,10 @@ class LAMap {
         if (!toCoord) return;
         const bothExplored = room.explored && rooms[targetId]?.explored;
         const line = L.polyline([fromCoord, toCoord], {
-          color: bothExplored ? '#3a3a8a' : '#1e1e3a',
-          weight: 2,
-          dashArray: bothExplored ? null : '4 4',
-          opacity: 0.8,
+          color: bothExplored ? '#7a6830' : '#3a3020',
+          weight: bothExplored ? 2 : 1.5,
+          dashArray: bothExplored ? null : '5 5',
+          opacity: bothExplored ? 0.9 : 0.5,
         }).addTo(this.map);
         this.lines.push(line);
       });
@@ -410,14 +412,54 @@ class LAMap {
     return this._poiMode ? 'Your Neighbourhood' : (this.zone?.name || 'Los Angeles');
   }
 
+  /** Fetch ALL nearby POIs from Overpass and render them as a faint discovery layer */
+  async fetchPOILayer(lat, lng, dungeonRoomIds = new Set()) {
+    if (this._poiFetched || !this.map) return;
+    this._poiFetched = true;
+    try {
+      const r = await fetch(`/nearby-rooms?lat=${lat}&lng=${lng}&radius=1200`);
+      if (!r.ok) return;
+      const data = await r.json();
+      const pois = data.pois || [];
+      if (!pois.length) return;
+
+      // Remove old layer
+      if (this._poiLayer) { this._poiLayer.clearLayers(); }
+      else { this._poiLayer = L.layerGroup().addTo(this.map); }
+
+      pois.forEach(poi => {
+        if (!poi.lat || !poi.lng) return;
+        const isDungeon = dungeonRoomIds.has(poi.name) || dungeonRoomIds.has(poi.osm_id);
+        if (isDungeon) return; // dungeon rooms have their own full markers
+
+        const icon = ROLE_ICONS[poi.game_role] || '📍';
+        const html = `<div class="la-poi-dot" title="${poi.name}">${icon}</div>`;
+        const leafIcon = L.divIcon({ html, className: '', iconSize: [22, 22], iconAnchor: [11, 11] });
+        const m = L.marker([poi.lat, poi.lng], { icon: leafIcon });
+        const popup = `<div style="font-family:'Roboto Mono',monospace;font-size:11px;min-width:140px">
+          <strong style="color:#c9a84c">${poi.name}</strong><br>
+          <span style="color:#6a5f50;font-size:10px;text-transform:uppercase">${poi.game_role || 'location'}</span>
+          ${poi.distance_m != null ? `<br><span style="color:#a09585">📍 ${poi.distance_m}m away</span>` : ''}
+          ${(poi.services||[]).length ? `<br><span style="color:#6a5f50;font-size:10px">${poi.services.slice(0,2).join(' · ')}</span>` : ''}
+        </div>`;
+        m.bindPopup(popup, { className: 'la-popup' });
+        this._poiLayer.addLayer(m);
+      });
+    } catch (e) {
+      console.warn('[LAMap] POI layer fetch failed:', e.message);
+    }
+  }
+
   reset() {
     this._clearOverlays();
     this.clearPlayerPosition();
     this._assigned = false;
     this._poiMode = false;
+    this._poiFetched = false;
     this.roomLocations = {};
     this.roomNames = {};
     this.zone = null;
+    if (this._poiLayer) { this._poiLayer.clearLayers(); this._poiLayer = null; }
   }
 
   _makeMarker(room, coord, isCurrent) {
@@ -742,7 +784,8 @@ function showScreen(name) {
     setTimeout(() => {
       setupMapCanvas();
       renderGameUI();
-    }, 50);
+      invalidateMapSize();
+    }, 80);
   }
 }
 
@@ -1089,10 +1132,47 @@ function setupMapCanvas() {
     laMap = new LAMap('la-map');
     laMap.init();
   }
-  if (state.dungeon) laMap.render(state.dungeon);
+  if (state.dungeon) {
+    laMap.render(state.dungeon);
+    // Also load full POI discovery layer if we have GPS
+    const pos = getPosition();
+    if (pos && !laMap._poiFetched) {
+      const dungeonNames = new Set(
+        Object.values(state.dungeon.rooms || {}).map(r => r.name)
+      );
+      laMap.fetchPOILayer(pos.lat, pos.lng, dungeonNames);
+    }
+  }
+}
+
+// Invalidate Leaflet size after map container becomes visible
+function invalidateMapSize() {
+  if (laMap && laMap.map) {
+    setTimeout(() => laMap.map.invalidateSize(), 120);
+  }
+}
+
+function sendPlayerAction() {
+  const input = document.getElementById('player-action-input');
+  const text = input.value.trim();
+  if (!text) return;
+  const phase = state.phase || 'exploring';
+  if (phase === 'combat') {
+    // In combat, free-text maps to "skill/describe" — still sends as player action
+    ws.send('PLAYER_ACTION', { action: text });
+  } else {
+    ws.send('PLAYER_ACTION', { action: text });
+  }
+  addLog(`▶ ${text}`, 'player-action');
+  input.value = '';
 }
 
 function initGame() {
+  // ── Free-text player action input ──
+  const actionInput = document.getElementById('player-action-input');
+  document.getElementById('btn-player-action-send').addEventListener('click', sendPlayerAction);
+  actionInput.addEventListener('keydown', e => { if (e.key === 'Enter') sendPlayerAction(); });
+
   document.getElementById('btn-toggle-inventory').addEventListener('click', openInventory);
   document.getElementById('btn-close-inventory').addEventListener('click', closeInventory);
   document.getElementById('btn-clear-log').addEventListener('click', () => {
@@ -1649,7 +1729,7 @@ function updateMapProgress() {
 
 let _contextualActionRoom = null;
 
-async function loadContextualActions(room) {
+async function loadContextualActions(room, narrativeHint) {
   if (!room) return;
   _contextualActionRoom = room.id;
 
@@ -1661,6 +1741,9 @@ async function loadContextualActions(room) {
     });
   }
 
+  // Use latest DM narrative or lastNarrativeHint to drive specific action buttons
+  const narrative = narrativeHint || lastNarrativeHint || '';
+
   try {
     const body = {
       room_name: room.name || 'Unknown Room',
@@ -1671,6 +1754,7 @@ async function loadContextualActions(room) {
       enemies: (room.enemies || []).map(e => e.name || e),
       location_name: pos ? `${pos.lat.toFixed(3)},${pos.lng.toFixed(3)}` : '',
       nearby_pois: nearby.slice(0, 5),
+      dm_narrative: narrative.slice(0, 800),
     };
 
     const r = await fetch('/contextual-actions', {
@@ -2395,11 +2479,11 @@ function setupHandlers() {
       if (currentRoomData) generateSceneImage(currentRoomData, text);
     }
 
-    // After DM responds, refresh contextual actions so buttons aren't stale
+    // After DM responds, regenerate contextual actions based on the specific narrative
     const phase = state.phase || 'exploring';
     if (phase === 'exploring') {
       const curRoom = state.dungeon && state.dungeon.rooms && state.dungeon.rooms[state.dungeon.current_room_id];
-      if (curRoom) renderActionBar();
+      if (curRoom) loadContextualActions(curRoom, text);
     }
   });
 

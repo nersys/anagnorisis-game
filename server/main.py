@@ -434,33 +434,51 @@ async def contextual_actions(
     enemies: list[str] = Body([], embed=True),
     location_name: str = Body("", embed=True),
     nearby_pois: list[str] = Body([], embed=True),
+    dm_narrative: str = Body("", embed=True),  # Latest DM response — drives specific choices
 ):
     """
     Generate 4–6 contextual action buttons for the current room using Claude.
+    When dm_narrative is provided, extract specific choices from the DM's latest response.
     Returns a list of { label, action, icon } objects.
     """
+    from server.story import get_dm_reminder
     enemy_line = f"Enemies present: {', '.join(enemies)}." if enemies else "The room is peaceful."
     poi_line = f"Nearby real-world places: {', '.join(nearby_pois[:4])}." if nearby_pois else ""
     loc_line = f"Real-world location: {location_name}." if location_name else ""
 
-    prompt = f"""You are a dungeon master generating interactive action choices for a player.
-
-Room: "{room_name}" (type: {room_type})
+    # If we have a DM narrative, extract the specific story choices from it
+    if dm_narrative and len(dm_narrative) > 30:
+        narrative_block = f"""The DM just narrated this — extract the specific choices it offers:
+---
+{dm_narrative[:800]}
+---
+Generate exactly 4-5 action buttons that directly answer or respond to the DM's narrative above.
+If the DM asked "Do you X, Y, or Z?", those exact options become buttons.
+If the DM ended on a threat or hook, buttons should address it specifically.
+Make actions MATCH the story — characters' names, specific objects, specific places mentioned.
+"""
+    else:
+        narrative_block = f"""Room: "{room_name}" (type: {room_type})
 Description: {room_description or "A dark dungeon room."}
-Player: {player_name}, a {player_class}
 {enemy_line}
 {loc_line}
 {poi_line}
-
 Generate exactly 5 short, creative action choices this player can take right now.
-Make them specific to this location and situation — reference the real place name if given.
-Mix exploration, social, and clever actions (not just attack).
-Format as JSON array of objects with keys: "label" (short, max 4 words), "action" (verb phrase for the DM), "icon" (single emoji).
+Make them specific to this location — reference the real place name if given.
+Mix exploration, social, and clever actions.
+"""
 
-Example format:
+    prompt = f"""You are a dungeon master generating interactive action buttons for a player.
+Campaign context: {get_dm_reminder()}
+
+Player: {player_name}, a {player_class}
+{narrative_block}
+Format as JSON array of objects with keys: "label" (2-4 words, imperative verb), "action" (verb phrase sent to DM), "icon" (single emoji).
+
+Example:
 [
-  {{"label": "Search the shadows", "action": "searches the room's dark corners for secrets", "icon": "🔍"}},
-  {{"label": "Listen at the door", "action": "presses their ear against the door to listen", "icon": "👂"}}
+  {{"label": "Examine newspaper", "action": "examines the newspaper clipping carefully", "icon": "📰"}},
+  {{"label": "Confront the girl", "action": "approaches the glassy-eyed girl and speaks to her", "icon": "👁"}}
 ]
 
 Output ONLY the JSON array, no explanation."""
@@ -514,18 +532,21 @@ async def companion_chat(
     }
     name, persona = COMPANION_PERSONAS.get(player_class, COMPANION_PERSONAS["warrior"])
 
+    from server.story import get_companion_context
+    story_context = get_companion_context()
+
     system_prompt = (
         f"You are {name}, {persona}. "
         f"You are the companion of {player_name}, a {player_class}. "
+        f"Campaign context: {story_context} "
         "Respond in character with 1-3 short sentences. "
-        "Be helpful, in-world, and match the dark fantasy dungeon RPG tone. "
-        "When given recent story context, reference it naturally — comment on what just happened, "
-        "what you saw, or what it means for your journey. Stay grounded in the specific events described. "
+        "Reference the Veil, the Archivist, the Waking Eyes, or the Tome when relevant. "
+        "When given recent story context, react to it specifically — name the NPCs, objects, and places mentioned. "
         "Never break character or mention being an AI."
     )
     user_prompt = message
     if context:
-        user_prompt = f"[Story context: {context}]\n\n{player_name} asks: {message}"
+        user_prompt = f"[Recent story events: {context}]\n\n{player_name} asks: {message}"
 
     try:
         ai_client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
