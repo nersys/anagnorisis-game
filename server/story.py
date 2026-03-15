@@ -119,6 +119,90 @@ RECURRING NPCS (DM should use these and build on them):
 }
 
 
+# ─────────────────────────────────────────────────────────────
+# NPC ROSTER  (instantiated in gameplay when matching room types)
+# ─────────────────────────────────────────────────────────────
+
+NPC_ROSTER = {
+    "marisol_vega": {
+        "name": "Marisol Vega",
+        "emoji": "📚",
+        "role": "City Archivist",
+        "alignment": "friendly",
+        "location_types": ["ancient_archive", "mage_tower", "academy"],
+        "first_encounter": (
+            "A woman with ink-stained fingers and reading glasses looks up sharply "
+            "from behind a stack of folders. She mouths something — then whispers: "
+            "\"You can see it too, can't you? The tear in things. I thought I was going mad.\""
+        ),
+        "met_again": (
+            "Marisol spots you and immediately checks over her shoulder. "
+            "\"I've been pulling records. There are patterns — disappearances, always near Veil sites.\""
+        ),
+        "tip": "She knows where the first Tome fragment was last documented.",
+    },
+    "detective_raines": {
+        "name": "Detective Omar Raines",
+        "emoji": "🔍",
+        "role": "LAPD Detective",
+        "alignment": "neutral",
+        "location_types": ["guard_post", "waypoint", "crossroads"],
+        "first_encounter": (
+            "A plainclothes detective in a rumpled jacket blocks the doorway. He studies you "
+            "with the patient eyes of someone who's seen too much. \"I've got seventeen open "
+            "missing persons files and they all walked past somewhere that felt wrong. "
+            "You look like you've felt wrong places before. Talk to me.\""
+        ),
+        "met_again": (
+            "Raines falls into step beside you without greeting. "
+            "\"Another body turned up this morning. No marks. Just... empty.\""
+        ),
+        "tip": "He has police files on the missing persons — some were near Veil sites.",
+    },
+    "the_sacristan": {
+        "name": "The Sacristan",
+        "emoji": "🕯️",
+        "role": "Unknown",
+        "alignment": "cryptic",
+        "location_types": ["temple", "cursed_ground", "ancient_altar"],
+        "first_encounter": (
+            "Candlelight flickers in a corner you could have sworn was empty. "
+            "A grey-robed figure holds a single taper, wax dripping over their knuckles. "
+            "They don't look at you when they speak: "
+            "\"The third fragment is already moving. The Waking Eyes sent someone for it. "
+            "Don't let them reach it first.\""
+        ),
+        "met_again": (
+            "The same figure. Same candle. As if they never left. "
+            "\"You're closer than you know. And the Archivist is starting to notice.\""
+        ),
+        "tip": "Knows the location of the third Tome fragment — but at a price.",
+    },
+    "waking_eyes_lieutenant": {
+        "name": "Waking Eye Lieutenant",
+        "emoji": "🔴",
+        "role": "Cultist Commander",
+        "alignment": "hostile",
+        "location_types": ["tavern", "training_hall", "arena", "inn"],
+        "first_encounter": (
+            "A figure in all red turns from the bar and smiles — the kind of smile "
+            "that knows something you don't. \"So the Veil-Touched finally come to us. "
+            "The Archivist sends regards.\""
+        ),
+        "met_again": (
+            "Another Lieutenant. They always dress in red. "
+            "\"You keep killing us and we keep sending more. That's the point.\""
+        ),
+        "tip": None,
+    },
+}
+
+
+def get_npc_roster() -> dict:
+    """Return the NPC roster for game_engine to use."""
+    return NPC_ROSTER
+
+
 def get_dm_story_context() -> str:
     """Return the full lore block for injection into DM system prompts."""
     return CAMPAIGN["lore"].strip()
