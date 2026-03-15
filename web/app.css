@@ -659,6 +659,16 @@ html, body {
 }
 .dir-btn:hover:not(:disabled) { background: var(--surface2); border-color: var(--border2); transform: scale(1.05); }
 .dir-btn:disabled { opacity: 0.3; }
+/* POI dungeon: direction button when room is too far away */
+.dir-btn--far { border-color: #f0cc6a55; color: #f0cc6a; position: relative; }
+.dir-btn--far:hover { border-color: #f0cc6a; background: #f0cc6a11; transform: none; }
+.dir-btn__dist {
+  position: absolute; bottom: -14px; left: 50%; transform: translateX(-50%);
+  font-size: 9px; color: #f0cc6a; white-space: nowrap; pointer-events: none;
+}
+/* Simulate travel button */
+.dir-btn--sim { border-color: #4fc3f733; color: #4fc3f7; }
+.dir-btn--sim.active { border-color: #4fc3f7; background: #4fc3f722; }
 .action-divider { width: 1px; height: 40px; background: var(--border); }
 .skill-btn {
   padding: 6px 12px;
@@ -829,6 +839,12 @@ html, body {
   box-shadow: 0 0 12px rgba(124,58,237,0.6);
 }
 .la-marker__icon { position: relative; z-index: 1; line-height: 1; }
+.la-marker__dist {
+  position: absolute; bottom: -18px; left: 50%; transform: translateX(-50%);
+  font-size: 9px; color: #4fc3f7; white-space: nowrap;
+  font-family: 'Roboto Mono', monospace; pointer-events: none;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.9);
+}
 .la-marker__dot {
   position: absolute; top: 2px; right: 2px;
   width: 8px; height: 8px; border-radius: 50%;

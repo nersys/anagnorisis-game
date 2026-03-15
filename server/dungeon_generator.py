@@ -1,10 +1,11 @@
 """
 Dungeon Generator
 
-Generates a playable dungeon with rooms, enemies, and items.
-Each adventure gets a fresh dungeon layout.
+Two modes:
+1. generate_dungeon()             — classic fixed 7-room layout (fallback)
+2. generate_dungeon_from_pois()   — real-world POIs near the player become rooms
 
-Layout (grid positions):
+Layout (grid positions, classic mode):
     (0,0) Start -> (1,0) Corridor -> (2,0) Chamber
                         |
                    (1,1) Treasure
@@ -16,6 +17,7 @@ Layout (grid positions):
 
 import random
 from copy import deepcopy
+from typing import Optional
 
 from shared.models import Room, Enemy, Item, RoomType, ItemType
 from shared.constants import (
@@ -204,3 +206,172 @@ def generate_dungeon() -> dict[str, Room]:
     r6.exits["north"] = r5.id
 
     return rooms
+
+
+# ── Enemy pool by game role ───────────────────────────────────────────────────
+
+_ROLE_ENEMIES: dict[str, list[list[str]]] = {
+    "training_hall":  [["orc", "goblin"], ["orc"]],
+    "grove":          [["goblin", "goblin"], ["goblin", "wraith"]],
+    "cursed_ground":  [["skeleton", "wraith"], ["skeleton", "skeleton"]],
+    "ancient_altar":  [["troll", "wraith"], ["wraith"]],
+    "arena":          [["orc", "troll"]],
+    "warrior_hall":   [["orc"]],
+    "mage_tower":     [["skeleton"]],
+    "ancient_archive":  [["wraith"]],
+    "mystery":        [["goblin"], ["skeleton"]],
+    "waypoint":       [["goblin"]],
+    "beast":          [["goblin", "goblin"]],   # nature enemies
+    "gladiator":      [["orc"]],
+    "rival":          [["orc", "goblin"]],
+    "undead":         [["skeleton", "wraith"]],
+    "guardian":       [["troll"]],
+    "pickpocket":     [["goblin"]],
+    "random":         [["goblin"], ["skeleton"], ["orc"]],
+}
+
+
+def _get_enemies_for_role(enemy_theme: str, is_boss: bool) -> list[Enemy]:
+    """Return an enemy list appropriate for the given role/theme."""
+    if is_boss:
+        boss_key = random.choice(["dragon_boss", "lich_boss"])
+        return [_make_enemy(boss_key)]
+
+    pools = _ROLE_ENEMIES.get(enemy_theme, [["goblin"]])
+    chosen = random.choice(pools)
+    return [_make_enemy(k) for k in chosen]
+
+
+# ── Real-world POI dungeon generator ─────────────────────────────────────────
+
+def generate_dungeon_from_pois(
+    pois: list[dict],
+    player_lat: float,
+    player_lng: float,
+) -> dict[str, Room]:
+    """
+    Build a dungeon from real-world POIs near the player.
+
+    - r0 = player's actual GPS position (safe start)
+    - r1 … rN = nearest classified OSM POIs (up to 7)
+    - Last room = boss (farthest non-safe location, or forced boss)
+    - Exits use "forward" / "back" (linear chain through real distance order)
+
+    Falls back to generate_dungeon() if no POIs are available.
+    """
+    if not pois:
+        return generate_dungeon()
+
+    rooms: dict[str, Room] = {}
+
+    # --- Room 0: player's real position (always safe) ---
+    start = Room(
+        id="r0",
+        x=0, y=0,
+        room_type=RoomType.START,
+        name="Your Location",
+        description=(
+            "You stand at your starting point. The city hums with hidden energy. "
+            "Every building, every corner, every park — the dungeon unfolds around you."
+        ),
+        exits={},
+        explored=True,
+        cleared=True,
+        lat=player_lat,
+        lng=player_lng,
+        game_role="start",
+    )
+    rooms["r0"] = start
+
+    # POIs are already sorted by distance ascending
+    selected = pois[:7]
+
+    # Force last room to be BOSS if possible
+    boss_idx = len(selected) - 1
+
+    for i, poi in enumerate(selected):
+        room_id = f"r{i + 1}"
+        is_boss = (i == boss_idx)
+
+        # Override room type to BOSS for the final room (unless it's already safe & the only option)
+        if is_boss and not poi["is_safe"]:
+            room_type = RoomType.BOSS
+        elif is_boss and poi["is_safe"] and len(selected) == 1:
+            room_type = RoomType.BOSS  # no choice
+            is_boss = True
+        else:
+            _type_map = {
+                "corridor": RoomType.CORRIDOR,
+                "chamber":  RoomType.CHAMBER,
+                "treasure": RoomType.TREASURE,
+                "boss":     RoomType.BOSS,
+                "start":    RoomType.START,
+            }
+            room_type = _type_map.get(poi["room_type"], RoomType.CORRIDOR)
+
+        # Enemies
+        enemies: list[Enemy] = []
+        if is_boss:
+            enemies = _get_enemies_for_role(poi["enemy_theme"], is_boss=True)
+        elif not poi["is_safe"]:
+            enemies = _get_enemies_for_role(poi["enemy_theme"], is_boss=False)
+
+        # Loot
+        loot_tier: int = poi.get("loot_tier", 0)
+        items: list[Item] = []
+        if loot_tier >= 1:
+            items.append(_make_item("health_potion"))
+        if loot_tier >= 2:
+            items.append(_make_item("mana_potion"))
+        if loot_tier >= 3:
+            items.append(_make_item("greater_health_potion"))
+
+        # Gold
+        gold_by_tier = {0: 0, 1: random.randint(5, 20), 2: random.randint(15, 40), 3: random.randint(40, 100)}
+        gold = random.randint(80, 150) if is_boss else gold_by_tier.get(loot_tier, 0)
+
+        room = Room(
+            id=room_id,
+            x=i + 1, y=0,
+            room_type=room_type,
+            name=poi["name"],
+            description=_enrich_description(poi),
+            exits={},
+            enemies=enemies,
+            items=items,
+            gold=gold,
+            cleared=poi["is_safe"] and not is_boss,
+            lat=poi["lat"],
+            lng=poi["lng"],
+            osm_id=poi.get("osm_id"),
+            game_role=poi["game_role"],
+            distance_m=poi.get("distance_m"),
+            services=poi.get("services", []),
+        )
+        rooms[room_id] = room
+
+    # --- Wire up exits: linear chain using forward/back ---
+    room_ids = list(rooms.keys())
+    for i in range(len(room_ids) - 1):
+        a = room_ids[i]
+        b = room_ids[i + 1]
+        rooms[a].exits["forward"] = b
+        rooms[b].exits["back"] = a
+
+    return rooms
+
+
+def _enrich_description(poi: dict) -> str:
+    """Add distance context to a POI's atmospheric description."""
+    dist = poi.get("distance_m", 0)
+    base = poi["description"]
+    emoji = poi.get("emoji", "📍")
+    if dist < 100:
+        context = "It looms right before you."
+    elif dist < 300:
+        context = f"A short walk — {dist}m away."
+    elif dist < 600:
+        context = f"About {dist}m from where you stand."
+    else:
+        context = f"Some {dist}m distant, calling to you."
+    return f"{base} {emoji} {context}"

@@ -35,6 +35,7 @@ from fastapi.responses import FileResponse, StreamingResponse, RedirectResponse
 from shared.models import GameMessage, MessageType
 from server.connection_manager import ConnectionManager
 from server.game_engine import GameEngine
+from server.poi_classifier import process_overpass_elements
 
 # Load environment variables
 load_dotenv()
@@ -356,6 +357,58 @@ out 12;
         taverns.append({"name": fname, "type": ftype, "emoji": femoji, "amenity": ftype, "lat": lat, "lng": lng, "cuisine": "", "opening_hours": ""})
 
     return {"taverns": taverns[:8], "location": {"lat": lat, "lng": lng}}
+
+
+@app.get("/nearby-rooms")
+async def nearby_rooms(
+    lat: float = Query(..., description="Player latitude"),
+    lng: float = Query(..., description="Player longitude"),
+    radius: int = Query(800, description="Search radius in metres (max 1500)"),
+):
+    """
+    Query OpenStreetMap for real POIs near the player's GPS position and
+    return them as classified game rooms. The dungeon IS the neighbourhood.
+    """
+    radius = min(radius, 1500)
+
+    overpass_query = f"""
+[out:json][timeout:15];
+(
+  node[amenity](around:{radius},{lat},{lng});
+  node[leisure](around:{radius},{lat},{lng});
+  node[tourism](around:{radius},{lat},{lng});
+  node[historic](around:{radius},{lat},{lng});
+  node[shop](around:{radius},{lat},{lng});
+  way[amenity](around:{radius},{lat},{lng});
+  way[leisure](around:{radius},{lat},{lng});
+  way[tourism](around:{radius},{lat},{lng});
+  way[historic](around:{radius},{lat},{lng});
+);
+out center 40;
+"""
+
+    elements: list[dict] = []
+    try:
+        async with httpx.AsyncClient(timeout=18.0) as client:
+            r = await client.post(
+                "https://overpass-api.de/api/interpreter",
+                data={"data": overpass_query},
+                headers={"User-Agent": "Anagnorisis-Game/1.0"},
+            )
+            if r.status_code == 200:
+                elements = r.json().get("elements", [])
+                logger.info(f"🗺️  Overpass returned {len(elements)} elements near {lat:.4f},{lng:.4f}")
+    except Exception as e:
+        logger.warning(f"Overpass /nearby-rooms failed: {e}")
+
+    pois = process_overpass_elements(elements, lat, lng, max_results=20)
+    logger.info(f"🏙️  Classified {len(pois)} game POIs near player")
+
+    return {
+        "pois": pois,
+        "player": {"lat": lat, "lng": lng},
+        "count": len(pois),
+    }
 
 
 @app.post("/companion-chat")
