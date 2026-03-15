@@ -2079,18 +2079,112 @@ function setupHandlers() {
   ws.on('DM_RESPONSE', msg => {
     const payload = msg.payload || {};
     const text = payload.narrative || payload.response || payload.text || '';
+    // Show roll summary inline before narrative if present
+    if (payload.roll_summary) addLog(payload.roll_summary, 'roll');
     if (text) addLog(text, 'narrative');
 
     // After DM responds, refresh contextual actions so buttons aren't stale
     const phase = state.phase || 'exploring';
     if (phase === 'exploring') {
       const curRoom = state.dungeon && state.dungeon.rooms && state.dungeon.rooms[state.dungeon.current_room_id];
-      if (curRoom) {
-        // Re-render direction buttons (restores movement) + fresh contextual actions
-        renderActionBar();
-      }
+      if (curRoom) renderActionBar();
     }
   });
+
+  // ── Dice roll requested by DM ──
+  ws.on('DICE_ROLL_REQUIRED', msg => {
+    const { die = 'd20', stat = 'NONE', dc = 10 } = msg.payload || {};
+    showDiceModal(die, stat, dc);
+  });
+
+  function getStatModifier(stat) {
+    const s = state.player && state.player.stats;
+    if (!s) return 0;
+    const statMap = {
+      STR: s.strength || 0,
+      DEX: s.dexterity || 0,
+      INT: s.intelligence || 0,
+      WIS: s.wisdom || 0,
+      CHA: s.charisma || 0,
+      CON: s.constitution || 0,
+    };
+    const val = statMap[stat] || 0;
+    return Math.floor((val - 10) / 2);
+  }
+
+  function showDiceModal(die, stat, dc) {
+    // Remove any existing dice modal
+    document.getElementById('dice-modal')?.remove();
+
+    const sides = parseInt(die.replace('d', '')) || 20;
+    const mod = stat !== 'NONE' ? getStatModifier(stat) : 0;
+    const modStr = mod >= 0 ? `+${mod}` : `${mod}`;
+
+    const modal = document.createElement('div');
+    modal.id = 'dice-modal';
+    modal.style.cssText = `
+      position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;
+      background:rgba(0,0,0,0.75);backdrop-filter:blur(4px);
+    `;
+    modal.innerHTML = `
+      <div style="
+        background:var(--bg-panel);border:1px solid var(--gold);border-radius:12px;
+        padding:32px 40px;text-align:center;min-width:280px;
+        box-shadow:0 0 40px rgba(201,168,76,0.3);
+      ">
+        <div style="font-family:var(--font-title);color:var(--gold);font-size:13px;letter-spacing:0.1em;margin-bottom:8px">
+          SKILL CHECK REQUIRED
+        </div>
+        <div style="font-size:48px;margin:12px 0" id="dice-face">🎲</div>
+        <div style="font-family:var(--font-title);font-size:22px;color:#fff;margin-bottom:4px">
+          ${die.toUpperCase()}${stat !== 'NONE' ? ` + ${stat} (${modStr})` : ''}
+        </div>
+        <div style="color:var(--text-dim);font-size:12px;margin-bottom:24px">
+          Difficulty Class: <strong style="color:var(--gold)">${dc}</strong>
+        </div>
+        <button id="dice-roll-btn" style="
+          font-family:var(--font-title);font-size:15px;letter-spacing:0.08em;
+          background:var(--gold);color:#1a1000;border:none;border-radius:6px;
+          padding:10px 32px;cursor:pointer;font-weight:700;width:100%;
+        ">ROLL THE DICE</button>
+        <div id="dice-result-display" style="margin-top:16px;font-size:14px;min-height:20px"></div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+
+    const faces = ['⚀','⚁','⚂','⚃','⚄','⚅'];
+    const diceEl = modal.querySelector('#dice-face');
+    const btn = modal.querySelector('#dice-roll-btn');
+    const resultEl = modal.querySelector('#dice-result-display');
+
+    btn.addEventListener('click', () => {
+      btn.disabled = true;
+      // Animate
+      let t = 0;
+      const anim = setInterval(() => {
+        diceEl.textContent = faces[Math.floor(Math.random() * faces.length)];
+        t++;
+        if (t > 14) {
+          clearInterval(anim);
+          const raw = Math.floor(Math.random() * sides) + 1;
+          const total = raw + mod;
+          const success = total >= dc;
+          diceEl.textContent = raw === sides ? '💥' : raw === 1 ? '💀' : '🎲';
+          resultEl.innerHTML = `
+            <span style="color:var(--text-dim)">Rolled ${raw}${mod !== 0 ? ` ${modStr}` : ''} = </span>
+            <strong style="font-size:20px;color:${success ? '#4caf50' : '#e53935'}">${total}</strong>
+            <span style="color:var(--text-dim)"> vs DC ${dc} — </span>
+            <strong style="color:${success ? '#4caf50' : '#e53935'}">${success ? 'SUCCESS' : 'FAILURE'}</strong>
+          `;
+          // Send result to server, close modal after brief pause
+          setTimeout(() => {
+            ws.send('DICE_RESULT', { raw, modifier: mod, total, stat, dc, die });
+            modal.remove();
+          }, 1800);
+        }
+      }, 60);
+    });
+  }
 
   // Game events (world events, broadcasts)
   ws.on('GAME_EVENT', msg => {

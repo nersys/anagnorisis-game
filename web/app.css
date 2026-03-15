@@ -656,6 +656,7 @@ html, body {
 .log-entry.system    { border-color: var(--cyan); background: rgba(0,188,212,0.05); color: var(--cyan); }
 .log-entry.victory   { border-color: var(--gold2); background: rgba(240,204,106,0.1); color: var(--gold2); }
 .log-entry.error     { border-color: var(--red); color: var(--red); }
+.log-entry.roll      { border-color: #9c27b0; background: rgba(156,39,176,0.06); color: #ce93d8; font-family: var(--font-mono); font-size: 12px; }
 .log-entry .log-time { font-size: 9px; color: var(--text-muted); margin-left: 8px; }
 .log-entry strong { color: #fff; font-weight: 600; }
 .log-entry em { color: var(--gold); font-style: italic; }
