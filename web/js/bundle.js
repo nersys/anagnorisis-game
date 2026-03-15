@@ -263,19 +263,27 @@ class LAMap {
     this.map = null;
     this.markers = {};
     this.lines = [];
+    this.playerDot = null;         // blue GPS dot
+    this.proximityCircle = null;   // 80 m ring around player
     this.roomLocations = {};  // roomId → [lat, lng]
     this.roomNames = {};      // roomId → real location name
     this.zone = null;
     this._assigned = false;
+    this._poiMode = false;         // true when rooms carry real lat/lng
     this.onRoomClick = null;  // callback(roomId)
   }
 
   init() {
     if (this.map) return;
 
+    // Start at player GPS if available, otherwise world-level zoom
+    const gps = getPosition();
+    const center = gps ? [gps.lat, gps.lng] : [20, 0];
+    const zoom   = gps ? 14 : 3;
+
     this.map = L.map(this.containerId, {
-      center: [34.0522, -118.2437],
-      zoom: 12,
+      center,
+      zoom,
       zoomControl: false,
       attributionControl: false,
     });
@@ -289,16 +297,62 @@ class LAMap {
     L.control.zoom({ position: 'bottomright' }).addTo(this.map);
   }
 
-  /** Assign real LA locations to dungeon rooms (called once per adventure) */
+  /**
+   * Assign locations to rooms.
+   * POI mode: rooms already carry real lat/lng from OpenStreetMap — use them.
+   * Classic fallback: pick a random hardcoded zone only when no real coords exist.
+   */
   assignLocations(rooms) {
     this._assigned = true;
-    this.zone = ZONES[Math.floor(Math.random() * ZONES.length)];
-    const locs = this.zone.locations;
-    Object.keys(rooms).forEach((id, i) => {
-      const loc = locs[i % locs.length];
-      this.roomLocations[id] = [loc.lat, loc.lng];
-      this.roomNames[id]     = loc.name;
-    });
+
+    const roomList = Object.values(rooms);
+    const hasPOICoords = roomList.some(r => r.lat != null && r.lng != null);
+
+    if (hasPOICoords) {
+      // Real GPS mode — every room has actual coordinates
+      this._poiMode = true;
+      roomList.forEach(room => {
+        if (room.lat != null && room.lng != null) {
+          this.roomLocations[room.id] = [room.lat, room.lng];
+          this.roomNames[room.id] = room.name;
+        }
+      });
+    } else {
+      // Fallback: no real coords — use a classic zone
+      this._poiMode = false;
+      this.zone = ZONES[Math.floor(Math.random() * ZONES.length)];
+      const locs = this.zone.locations;
+      Object.keys(rooms).forEach((id, i) => {
+        const loc = locs[i % locs.length];
+        this.roomLocations[id] = [loc.lat, loc.lng];
+        this.roomNames[id]     = loc.name;
+      });
+    }
+  }
+
+  /** Update the player's real GPS dot. Called on every GPS position update. */
+  updatePlayerPosition(lat, lng) {
+    if (!this.map) return;
+    if (this.playerDot) {
+      this.playerDot.setLatLng([lat, lng]);
+      if (this.proximityCircle) this.proximityCircle.setLatLng([lat, lng]);
+      return;
+    }
+    this.playerDot = L.circleMarker([lat, lng], {
+      radius: 8, fillColor: '#4fc3f7', color: '#fff', weight: 2, fillOpacity: 0.9,
+    }).addTo(this.map);
+    this.playerDot.bindTooltip('📍 You are here', { permanent: false });
+    this.proximityCircle = L.circle([lat, lng], {
+      radius: 80, color: '#4fc3f7', fillColor: '#4fc3f7',
+      fillOpacity: 0.04, weight: 1, dashArray: '3 3',
+    }).addTo(this.map);
+    // Also pan map to player
+    this.map.flyTo([lat, lng], this.map.getZoom(), { duration: 1.0 });
+  }
+
+  clearPlayerPosition() {
+    if (this.playerDot) { this.playerDot.remove(); this.playerDot = null; }
+    if (this.proximityCircle) { this.proximityCircle.remove(); this.proximityCircle = null; }
   }
 
   /** Full re-render of the map from dungeon state */
@@ -341,21 +395,26 @@ class LAMap {
 
     // Pan to current room
     const cur = this.roomLocations[dungeon.current_room_id];
-    if (cur) this.map.flyTo(cur, this.zone?.zoom || 14, { duration: 1.2 });
+    if (cur) {
+      const zoom = this._poiMode ? 16 : (this.zone?.zoom || 14);
+      this.map.flyTo(cur, zoom, { duration: 1.2 });
+    }
   }
 
-  /** Get the real LA name for a room */
+  /** Get the real location name for a room */
   getRoomName(roomId) {
     return this.roomNames[roomId] || null;
   }
 
   getZoneName() {
-    return this.zone?.name || 'Los Angeles';
+    return this._poiMode ? 'Your Neighbourhood' : (this.zone?.name || 'Los Angeles');
   }
 
   reset() {
     this._clearOverlays();
+    this.clearPlayerPosition();
     this._assigned = false;
+    this._poiMode = false;
     this.roomLocations = {};
     this.roomNames = {};
     this.zone = null;
@@ -365,8 +424,13 @@ class LAMap {
     const explored  = room.explored;
     const cleared   = room.cleared;
     const hasEnemy  = room.enemies?.some(e => e.hp > 0);
-    const icon      = ROOM_ICONS[room.room_type] || '❓';
+    const roleIcon  = ROLE_ICONS[room.game_role] || null;
+    const icon      = roleIcon || ROOM_ICONS[room.room_type] || '❓';
     const realName  = this.roomNames[room.id] || room.name;
+
+    const distLabel = (this._poiMode && room.distance_m != null)
+      ? `<span class="la-marker__dist">${room.distance_m}m</span>`
+      : '';
 
     const classes = [
       'la-marker',
@@ -380,23 +444,29 @@ class LAMap {
     const html = `
       <div class="${classes}">
         <span class="la-marker__icon">${explored ? icon : '?'}</span>
+        ${distLabel}
         ${hasEnemy  ? '<span class="la-marker__dot la-marker__dot--enemy"></span>'  : ''}
         ${cleared && !hasEnemy ? '<span class="la-marker__dot la-marker__dot--clear"></span>' : ''}
         ${isCurrent ? '<div class="la-marker__ring"></div>' : ''}
       </div>`;
 
-    const leafletIcon = L.divIcon({ html, className: '', iconSize: [40, 40], iconAnchor: [20, 20] });
+    const leafletIcon = L.divIcon({ html, className: '', iconSize: [40, 50], iconAnchor: [20, 25] });
     const marker = L.marker(coord, { icon: leafletIcon });
 
     // Popup with real location info
+    const servicesHtml = (room.services || []).length
+      ? `<br><span style="color:#888;font-size:10px">${room.services.slice(0, 3).join(' · ')}</span>`
+      : '';
     const popupHtml = `
       <div style="font-family:'Roboto Mono',monospace;font-size:12px;min-width:160px">
         <strong style="color:#c9a84c">${realName}</strong><br>
-        <span style="color:#777;font-size:10px;text-transform:uppercase;letter-spacing:1px">${room.room_type}</span>
+        <span style="color:#777;font-size:10px;text-transform:uppercase;letter-spacing:1px">${room.game_role || room.room_type}</span>
+        ${room.distance_m != null ? `<br><span style="color:#4fc3f7">📍 ${room.distance_m}m away</span>` : ''}
         ${!explored  ? '<br><span style="color:#555">⬛ Unexplored</span>' : ''}
         ${hasEnemy   ? '<br><span style="color:#e53935">⚔ Enemies here</span>'  : ''}
         ${cleared    ? '<br><span style="color:#43a047">✓ Cleared</span>'       : ''}
         ${room.gold > 0 && !cleared ? `<br><span style="color:#c9a84c">💰 ${room.gold} gold</span>` : ''}
+        ${servicesHtml}
       </div>`;
     marker.bindPopup(popupHtml, { className: 'la-popup' });
 
@@ -585,6 +655,7 @@ let _narratorVoice = null;     // cached preferred voice
 let dmEnabled = true;          // DM on/off — toggled in DM Options panel
 let dmPersonality = 'balanced';// current DM personality preset
 let dmMemoryTurns = 0;         // last known turn count from server
+const _narrativeHistory = [];  // rolling log of last 8 DM narrative lines for companion context
 
 // ═══════════════════════════════════════════════════════
 // NARRATOR (Web Speech API TTS)
@@ -1047,6 +1118,7 @@ function initGame() {
     document.getElementById('dm-options-modal').classList.add('hidden');
   }
   document.getElementById('btn-dm-options').addEventListener('click', openDMOptions);
+  document.getElementById('btn-dm-options-right').addEventListener('click', openDMOptions);
   document.getElementById('btn-close-dm-options').addEventListener('click', closeDMOptions);
   document.getElementById('dm-options-modal').addEventListener('click', e => {
     if (e.target === document.getElementById('dm-options-modal')) closeDMOptions();
@@ -1937,14 +2009,17 @@ async function sendCompanionMessage() {
   input.value = '';
   log.scrollTop = log.scrollHeight;
 
-  // Build context from current game state
+  // Build rich context: recent narrative + current game state
   const phase = state.phase || 'exploring';
   const room = currentRoomData;
+  const storyLines = _narrativeHistory.slice(-4).join(' | ');
   const context = [
+    storyLines ? `Recent story: ${storyLines}` : '',
     phase === 'combat' ? 'We are in combat' : `We are ${phase}`,
-    room ? `in ${room.name || 'a dungeon room'}` : '',
-    state.dungeon ? `(${state.dungeon.rooms_cleared || 0} rooms cleared)` : '',
-  ].filter(Boolean).join(', ');
+    room ? `Current location: ${room.name || 'a dungeon room'}` : '',
+    room?.description ? `Room: ${room.description}` : '',
+    state.dungeon ? `${state.dungeon.rooms_cleared || 0} rooms cleared` : '',
+  ].filter(Boolean).join('. ');
 
   // Show typing indicator
   const typingEl = document.createElement('div');
@@ -2262,7 +2337,9 @@ function setupHandlers() {
       addLog(text, 'narrative');
       narratorSpeak(text);
       lastNarrativeHint = text;
-      // Track memory turns for DM options panel
+      // Track narrative history for companion context
+      _narrativeHistory.push(text);
+      if (_narrativeHistory.length > 8) _narrativeHistory.shift();
       dmMemoryTurns++;
       document.getElementById('dm-memory-count') && (document.getElementById('dm-memory-count').textContent = dmMemoryTurns);
       // Refresh scene image to reflect new story moment
@@ -2500,6 +2577,8 @@ async function initGPS() {
     renderGPSIndicator();
     const label = ip.city ? `${ip.city} (${ip.lat.toFixed(3)}, ${ip.lng.toFixed(3)})` : `${ip.lat.toFixed(3)}, ${ip.lng.toFixed(3)}`;
     updateLocationWidget(label, 'IP');
+    // Pan map to detected location
+    if (laMap && laMap.map) laMap.map.flyTo([ip.lat, ip.lng], 13, { duration: 1.5 });
     return;
   }
   if (!ip && !gpsResolved) {

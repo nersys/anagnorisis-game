@@ -248,34 +248,43 @@ async def location_history(
 @app.get("/tts")
 async def text_to_speech(
     text: str = Query(..., description="Text to narrate"),
-    voice: str = Query("onyx", description="OpenAI TTS voice"),
 ):
     """
-    Convert text to speech using OpenAI TTS (tts-1-hd).
-    Returns MP3 audio. Requires OPENAI_API_KEY.
+    Convert text to speech using ElevenLabs (if ELEVENLABS_API_KEY is set).
+    Returns MP3 audio. Falls back to 404 so the client uses browser Web Speech API.
+
+    Recommended voice: Adam (pNInz6obpgDQGcFmaJgB) — deep, dramatic narrator.
+    Override via ELEVENLABS_VOICE_ID env var.
     """
     from fastapi.responses import Response
-    openai_key = os.getenv("OPENAI_API_KEY")
-    if not openai_key:
+
+    elevenlabs_key = os.getenv("ELEVENLABS_API_KEY")
+    if not elevenlabs_key:
         return Response(status_code=404)
 
-    # Truncate to avoid huge requests (OpenAI TTS limit is 4096 chars)
-    narration = text[:2000]
+    voice_id = os.getenv("ELEVENLABS_VOICE_ID", "pNInz6obpgDQGcFmaJgB")  # Adam
+    narration = text[:2500]
 
     try:
-        import openai as openai_lib
-        client = openai_lib.AsyncOpenAI(api_key=openai_key)
-        response = await client.audio.speech.create(
-            model="tts-1-hd",
-            voice=voice,      # onyx = deep dramatic male; fable = storyteller
-            input=narration,
-            response_format="mp3",
-            speed=0.9,        # Slightly slower for gravitas
-        )
-        audio_bytes = response.content
-        return Response(content=audio_bytes, media_type="audio/mpeg")
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            r = await client.post(
+                f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}",
+                headers={
+                    "xi-api-key": elevenlabs_key,
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "text": narration,
+                    "model_id": "eleven_monolingual_v1",
+                    "voice_settings": {"stability": 0.45, "similarity_boost": 0.75},
+                },
+            )
+            if r.status_code == 200:
+                return Response(content=r.content, media_type="audio/mpeg")
+            logger.warning(f"ElevenLabs TTS returned {r.status_code}")
+            return Response(status_code=500)
     except Exception as e:
-        logger.warning(f"OpenAI TTS failed: {e}")
+        logger.warning(f"ElevenLabs TTS failed: {e}")
         return Response(status_code=500)
 
 
@@ -510,11 +519,13 @@ async def companion_chat(
         f"You are the companion of {player_name}, a {player_class}. "
         "Respond in character with 1-3 short sentences. "
         "Be helpful, in-world, and match the dark fantasy dungeon RPG tone. "
+        "When given recent story context, reference it naturally — comment on what just happened, "
+        "what you saw, or what it means for your journey. Stay grounded in the specific events described. "
         "Never break character or mention being an AI."
     )
     user_prompt = message
     if context:
-        user_prompt = f"[Current situation: {context}]\n{message}"
+        user_prompt = f"[Story context: {context}]\n\n{player_name} asks: {message}"
 
     try:
         ai_client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
