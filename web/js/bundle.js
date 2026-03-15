@@ -257,6 +257,32 @@ const ROOM_ICONS = {
   boss:     '💀',
 };
 
+// Maps game_role (from POI classifier) → display emoji for map markers
+const ROLE_ICONS = {
+  tavern:          '🍺',
+  inn:             '🏨',
+  training_hall:   '⚔️',
+  mage_tower:      '📚',
+  academy:         '🎓',
+  healer_shrine:   '✨',
+  merchant_guild:  '💰',
+  bardic_stage:    '🎭',
+  general_store:   '🏪',
+  guard_post:      '🛡️',
+  warrior_hall:    '🔥',
+  cursed_ground:   '💀',
+  waypoint:        '🚌',
+  grove:           '🌿',
+  arena:           '🏟️',
+  ancient_archive: '🏛️',
+  ancient_altar:   '⚱️',
+  overlook:        '🔭',
+  armory:          '⚔️',
+  temple:          '🙏',
+  mystery:         '❓',
+  start:           '🚪',
+};
+
 class LAMap {
   constructor(containerId) {
     this.containerId = containerId;
@@ -691,6 +717,7 @@ let selectedMode = 'guided';
 let selectedDifficulty = 'normal';
 let currentRoomData = null;
 let sceneImageSeed = 1;
+let sceneImageEnabled = true;  // user can disable scene art generation
 let _gpsReady = false;
 let narratorEnabled = true;    // narrator is ON by default; user toggles with 🔊/🔇
 let _narratorVoice = null;     // cached preferred voice
@@ -1207,6 +1234,8 @@ function initGame() {
     document.getElementById('dm-options-modal').classList.remove('hidden');
     // Sync checkbox to current state
     document.getElementById('dm-enabled-checkbox').checked = dmEnabled;
+    const imgToggle = document.getElementById('scene-image-toggle');
+    if (imgToggle) imgToggle.checked = sceneImageEnabled;
     // Sync personality buttons
     document.querySelectorAll('.dm-personality-btn').forEach(btn => {
       btn.classList.toggle('active', btn.dataset.p === dmPersonality);
@@ -1250,6 +1279,19 @@ function initGame() {
     addLog('📜 Story memory cleared. The DM begins fresh.', 'system');
   });
 
+  // Image generation toggle
+  document.getElementById('scene-image-toggle')?.addEventListener('change', e => {
+    sceneImageEnabled = e.target.checked;
+    const img = document.getElementById('scene-image');
+    if (sceneImageEnabled) {
+      if (img) img.style.display = '';
+      if (currentRoomData) { sceneImageSeed = Math.floor(Math.random() * 99999); generateSceneImage(currentRoomData, lastNarrativeHint); }
+    } else {
+      if (img) { img.src = ''; img.style.display = 'none'; }
+    }
+    addLog(`🎨 Scene art ${sceneImageEnabled ? 'enabled' : 'disabled'}`, 'system');
+  });
+
   // Apply button — send full config to server
   document.getElementById('btn-dm-options-apply').addEventListener('click', () => {
     const notes = document.getElementById('dm-personality-notes').value.trim();
@@ -1284,27 +1326,35 @@ function initGame() {
     }
   });
 
-  // ── Music: Spotify embed widget ──
-  // Dark fantasy RPG ambient playlist — change SPOTIFY_PLAYLIST_ID to use your own
-  const SPOTIFY_PLAYLIST_ID = '37i9dQZF1DX8vZlsdZPjzn'; // "Epic & Dramatic" — works well for RPG
+  // ── Music: YouTube ambient embed ──
+  // Dark fantasy RPG ambient — hours-long atmospheric track embedded via YouTube
+  // Video ID can be overridden via appConfig.ambient_yt_id
+  const DEFAULT_AMBIENT_YT = 'HGl9nhFkj9k'; // "Dark Souls / Hollow Knight style ambience" mix
   let spotifyOpen = false;
   let spotifyEl = null;
 
   function createSpotifyWidget() {
+    const ytId = (appConfig && appConfig.ambient_yt_id) || DEFAULT_AMBIENT_YT;
     const el = document.createElement('div');
     el.id = 'spotify-widget';
     el.style.cssText = `
       position:fixed; bottom:60px; right:16px; z-index:9999;
-      width:300px; border-radius:12px; overflow:hidden;
+      width:280px; border-radius:12px; overflow:hidden;
       box-shadow:0 8px 32px rgba(0,0,0,0.8);
-      border:1px solid rgba(201,168,76,0.2);
+      border:1px solid rgba(201,168,76,0.25);
+      background:#0d0b06;
     `;
     el.innerHTML = `
+      <div style="padding:8px 10px 4px;display:flex;align-items:center;justify-content:space-between">
+        <span style="font-family:var(--font-title);font-size:10px;color:#866a30;letter-spacing:0.1em">🎵 AMBIENT</span>
+        <button onclick="(function(){var w=document.getElementById('spotify-widget');if(w)w.style.display='none';var b=document.getElementById('btn-music-toggle');if(b){b.textContent='🔇';b.title='Show ambient music';}})();"
+          style="background:none;border:none;color:#554433;cursor:pointer;font-size:13px;padding:0;line-height:1">✕</button>
+      </div>
       <iframe
-        src="https://open.spotify.com/embed/playlist/${SPOTIFY_PLAYLIST_ID}?utm_source=generator&theme=0"
-        width="300" height="152" frameborder="0"
-        allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
-        loading="lazy">
+        src="https://www.youtube.com/embed/${ytId}?autoplay=1&loop=1&playlist=${ytId}&controls=1&modestbranding=1&rel=0"
+        width="280" height="158" frameborder="0"
+        allow="autoplay; encrypted-media"
+        allowfullscreen loading="lazy">
       </iframe>
     `;
     document.body.appendChild(el);
@@ -1849,6 +1899,14 @@ let lastNarrativeHint = '';
 
 function generateSceneImage(room, narrativeHint) {
   if (!room) return;
+  if (!sceneImageEnabled) {
+    // Show a placeholder when art is disabled
+    const img = document.getElementById('scene-image');
+    if (img) { img.src = ''; img.style.display = 'none'; }
+    const loading = document.getElementById('scene-loading');
+    if (loading) loading.style.display = 'none';
+    return;
+  }
   currentRoomData = room;
 
   const img = document.getElementById('scene-image');
@@ -2509,76 +2567,152 @@ function setupHandlers() {
   }
 
   function showDiceModal(die, stat, dc) {
-    // Remove any existing dice modal
     document.getElementById('dice-modal')?.remove();
 
     const sides = parseInt(die.replace('d', '')) || 20;
     const mod = stat !== 'NONE' ? getStatModifier(stat) : 0;
     const modStr = mod >= 0 ? `+${mod}` : `${mod}`;
 
+    // Inject keyframe styles once
+    if (!document.getElementById('dice-modal-styles')) {
+      const style = document.createElement('style');
+      style.id = 'dice-modal-styles';
+      style.textContent = `
+        @keyframes dm-overlay-in { from { opacity:0; } to { opacity:1; } }
+        @keyframes dm-card-in { from { opacity:0; transform:scale(0.88) translateY(20px); } to { opacity:1; transform:scale(1) translateY(0); } }
+        @keyframes dm-spin { 0%{transform:rotate(0deg) scale(1)} 25%{transform:rotate(90deg) scale(1.18)} 50%{transform:rotate(180deg) scale(1)} 75%{transform:rotate(270deg) scale(1.18)} 100%{transform:rotate(360deg) scale(1)} }
+        @keyframes dm-land { 0%{transform:scale(1.5) rotate(18deg)} 45%{transform:scale(0.82) rotate(-6deg)} 72%{transform:scale(1.12) rotate(3deg)} 100%{transform:scale(1) rotate(0deg)} }
+        @keyframes dm-result-rise { from{opacity:0;transform:translateY(14px) scale(0.75)} to{opacity:1;transform:translateY(0) scale(1)} }
+        @keyframes dm-bar-fill { from{width:0%} }
+        @keyframes dm-shimmer { 0%,100%{box-shadow:0 0 60px rgba(201,168,76,0.12)} 50%{box-shadow:0 0 80px rgba(201,168,76,0.28)} }
+        #dice-modal { animation: dm-overlay-in 0.2s ease both; }
+        #dice-modal .dm-card { animation: dm-card-in 0.3s cubic-bezier(0.34,1.4,0.64,1) both, dm-shimmer 3s ease infinite; }
+        #dice-face-wrap.dm-spinning { animation: dm-spin 0.22s linear infinite; }
+        #dice-face-wrap.dm-landing { animation: dm-land 0.55s cubic-bezier(0.34,1.56,0.64,1) forwards; }
+        .dm-result-block { animation: dm-result-rise 0.45s cubic-bezier(0.34,1.4,0.64,1) both; }
+        .dm-bar-inner { animation: dm-bar-fill 0.7s cubic-bezier(0.4,0,0.2,1) both; }
+        #dice-roll-btn:not(:disabled):hover { filter:brightness(1.12); transform:translateY(-1px); }
+        #dice-roll-btn:not(:disabled):active { transform:scale(0.97); }
+      `;
+      document.head.appendChild(style);
+    }
+
     const modal = document.createElement('div');
     modal.id = 'dice-modal';
-    modal.style.cssText = `
-      position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;
-      background:rgba(0,0,0,0.75);backdrop-filter:blur(4px);
-    `;
+    modal.style.cssText = `position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.9);backdrop-filter:blur(10px);`;
     modal.innerHTML = `
-      <div style="
-        background:var(--bg-panel);border:1px solid var(--gold);border-radius:12px;
-        padding:32px 40px;text-align:center;min-width:280px;
-        box-shadow:0 0 40px rgba(201,168,76,0.3);
+      <div class="dm-card" style="
+        background:linear-gradient(155deg,#1c1608 0%,#0e0b06 60%,#140d04 100%);
+        border:1px solid rgba(201,168,76,0.45);border-radius:18px;
+        padding:36px 44px 32px;text-align:center;min-width:300px;max-width:360px;width:90vw;
       ">
-        <div style="font-family:var(--font-title);color:var(--gold);font-size:13px;letter-spacing:0.1em;margin-bottom:8px">
-          SKILL CHECK REQUIRED
+        <div style="font-family:var(--font-title,serif);color:#866a30;font-size:10px;letter-spacing:0.2em;text-transform:uppercase;margin-bottom:20px">
+          ⚔&nbsp; Skill Check Required &nbsp;⚔
         </div>
-        <div style="font-size:48px;margin:12px 0" id="dice-face">🎲</div>
-        <div style="font-family:var(--font-title);font-size:22px;color:#fff;margin-bottom:4px">
-          ${die.toUpperCase()}${stat !== 'NONE' ? ` + ${stat} (${modStr})` : ''}
+
+        <!-- Stat chips row -->
+        <div style="display:flex;align-items:stretch;justify-content:center;gap:0;margin-bottom:28px;border:1px solid rgba(201,168,76,0.2);border-radius:10px;overflow:hidden;">
+          <div style="flex:1;padding:10px 0;background:rgba(201,168,76,0.06);">
+            <div style="font-size:9px;color:#665535;letter-spacing:0.12em;text-transform:uppercase;margin-bottom:4px">Die</div>
+            <div style="font-family:var(--font-title,serif);font-size:20px;font-weight:700;color:#c9a84c">${die.toUpperCase()}</div>
+          </div>
+          ${stat !== 'NONE' ? `
+          <div style="width:1px;background:rgba(201,168,76,0.15)"></div>
+          <div style="flex:1;padding:10px 0;background:rgba(201,168,76,0.04);">
+            <div style="font-size:9px;color:#665535;letter-spacing:0.12em;text-transform:uppercase;margin-bottom:4px">Mod</div>
+            <div style="font-family:var(--font-title,serif);font-size:20px;font-weight:700;color:#c9a84c">${modStr}&thinsp;<span style="font-size:13px;opacity:0.7">${stat}</span></div>
+          </div>` : ''}
+          <div style="width:1px;background:rgba(201,168,76,0.15)"></div>
+          <div style="flex:1;padding:10px 0;background:rgba(201,168,76,0.06);">
+            <div style="font-size:9px;color:#665535;letter-spacing:0.12em;text-transform:uppercase;margin-bottom:4px">DC</div>
+            <div style="font-family:var(--font-title,serif);font-size:20px;font-weight:700;color:#c9a84c">${dc}</div>
+          </div>
         </div>
-        <div style="color:var(--text-dim);font-size:12px;margin-bottom:24px">
-          Difficulty Class: <strong style="color:var(--gold)">${dc}</strong>
-        </div>
+
+        <!-- Animated die face -->
+        <div id="dice-face-wrap" style="font-size:82px;line-height:1;display:inline-block;margin-bottom:24px;filter:drop-shadow(0 0 12px rgba(201,168,76,0.2))">🎲</div>
+
+        <!-- Result area -->
+        <div id="dice-result-display" style="min-height:80px;margin-bottom:20px"></div>
+
+        <!-- Roll button -->
         <button id="dice-roll-btn" style="
-          font-family:var(--font-title);font-size:15px;letter-spacing:0.08em;
-          background:var(--gold);color:#1a1000;border:none;border-radius:6px;
-          padding:10px 32px;cursor:pointer;font-weight:700;width:100%;
-        ">ROLL THE DICE</button>
-        <div id="dice-result-display" style="margin-top:16px;font-size:14px;min-height:20px"></div>
+          font-family:var(--font-title,serif);font-size:14px;letter-spacing:0.12em;font-weight:700;
+          background:linear-gradient(135deg,#c9a84c 0%,#a07428 100%);
+          color:#0d0900;border:none;border-radius:9px;
+          padding:13px 0;width:100%;cursor:pointer;
+          box-shadow:0 3px 16px rgba(201,168,76,0.28);
+          transition:filter 0.15s,transform 0.1s,box-shadow 0.15s;
+        ">⚔ &nbsp;ROLL THE ${die.toUpperCase()}&nbsp; ⚔</button>
       </div>
     `;
     document.body.appendChild(modal);
 
-    const faces = ['⚀','⚁','⚂','⚃','⚄','⚅'];
-    const diceEl = modal.querySelector('#dice-face');
+    const faceWrap = modal.querySelector('#dice-face-wrap');
     const btn = modal.querySelector('#dice-roll-btn');
     const resultEl = modal.querySelector('#dice-result-display');
+    const faceEmojis = ['⚀','⚁','⚂','⚃','⚄','⚅'];
 
     btn.addEventListener('click', () => {
       btn.disabled = true;
-      // Animate
+      btn.style.opacity = '0.35';
+      faceWrap.classList.add('dm-spinning');
+
+      const totalFrames = 20 + Math.floor(Math.random() * 10);
       let t = 0;
       const anim = setInterval(() => {
-        diceEl.textContent = faces[Math.floor(Math.random() * faces.length)];
+        faceWrap.textContent = faceEmojis[Math.floor(Math.random() * faceEmojis.length)];
         t++;
-        if (t > 14) {
+        if (t >= totalFrames) {
           clearInterval(anim);
-          const raw = Math.floor(Math.random() * sides) + 1;
+          const raw   = Math.floor(Math.random() * sides) + 1;
           const total = raw + mod;
-          const success = total >= dc;
-          diceEl.textContent = raw === sides ? '💥' : raw === 1 ? '💀' : '🎲';
-          resultEl.innerHTML = `
-            <span style="color:var(--text-dim)">Rolled ${raw}${mod !== 0 ? ` ${modStr}` : ''} = </span>
-            <strong style="font-size:20px;color:${success ? '#4caf50' : '#e53935'}">${total}</strong>
-            <span style="color:var(--text-dim)"> vs DC ${dc} — </span>
-            <strong style="color:${success ? '#4caf50' : '#e53935'}">${success ? 'SUCCESS' : 'FAILURE'}</strong>
-          `;
-          // Send result to server, close modal after brief pause
+          const success  = total >= dc;
+          const isCrit   = raw === sides;
+          const isFumble = raw === 1 && sides >= 10;
+
+          faceWrap.classList.remove('dm-spinning');
+          faceWrap.classList.add('dm-landing');
+          faceWrap.textContent = isCrit ? '💥' : isFumble ? '💀' : faceEmojis[Math.min(raw - 1, 5)];
+
+          const successColor = isCrit ? '#ffd700' : success ? '#43a047' : '#e53935';
+          const failGlow     = isCrit ? 'rgba(255,215,0,0.4)' : success ? 'rgba(67,160,71,0.35)' : 'rgba(229,57,53,0.35)';
+          const resultLabel  = isCrit ? '⚡ CRITICAL HIT' : isFumble ? '💀 CRITICAL FUMBLE' : success ? '✓  SUCCESS' : '✗  FAILURE';
+
+          // DC bar: scale total and dc onto a [0,100%] range for visual comparison
+          const scale   = (dc + 10);
+          const barPct  = Math.min(100, Math.round((total / scale) * 100));
+          const dcPct   = Math.min(99,  Math.round((dc    / scale) * 100));
+
           setTimeout(() => {
-            ws.send('DICE_RESULT', { raw, modifier: mod, total, stat, dc, die });
-            modal.remove();
-          }, 1800);
+            resultEl.innerHTML = `
+              <div class="dm-result-block">
+                <div style="font-size:64px;font-weight:900;font-family:var(--font-title,serif);color:${successColor};line-height:1;
+                            text-shadow:0 0 30px ${failGlow};margin-bottom:6px">${total}</div>
+                <div style="font-size:11px;color:#665535;margin-bottom:12px">
+                  rolled&nbsp;<strong style="color:#a08040">${raw}</strong>${mod !== 0 ? `&nbsp;${modStr}` : ''}
+                  &nbsp;=&nbsp;<strong style="color:${successColor}">${total}</strong>&nbsp;vs DC&nbsp;<strong style="color:#a08040">${dc}</strong>
+                </div>
+                <!-- progress bar -->
+                <div style="position:relative;height:5px;background:#1c1810;border-radius:3px;overflow:visible;margin-bottom:14px">
+                  <div class="dm-bar-inner" style="position:absolute;left:0;top:0;height:100%;width:${barPct}%;background:${successColor};border-radius:3px"></div>
+                  <!-- DC marker -->
+                  <div style="position:absolute;left:${dcPct}%;top:-4px;width:2px;height:13px;background:rgba(255,255,255,0.4);border-radius:1px"></div>
+                  <div style="position:absolute;left:${dcPct}%;top:-16px;font-size:9px;color:#665535;transform:translateX(-50%)">DC</div>
+                </div>
+                <div style="font-family:var(--font-title,serif);font-size:17px;font-weight:700;letter-spacing:0.1em;color:${successColor};
+                            text-shadow:0 0 20px ${failGlow}">${resultLabel}</div>
+              </div>
+            `;
+
+            setTimeout(() => {
+              ws.send('DICE_RESULT', { raw, modifier: mod, total, stat, dc, die });
+              modal.style.animation = 'dm-overlay-in 0.18s ease reverse';
+              setTimeout(() => modal.remove(), 180);
+            }, 2400);
+          }, 250);
         }
-      }, 60);
+      }, 75);
     });
   }
 
