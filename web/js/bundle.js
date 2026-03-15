@@ -1424,12 +1424,20 @@ function renderStats() {
   `;
 }
 
+let _lastPhase = '';
 function renderPhaseBanner() {
   const banner = document.getElementById('phase-banner');
   const phase = state.phase || 'exploring';
+  const changed = phase !== _lastPhase;
+  _lastPhase = phase;
   banner.className = `phase-banner ${phase}`;
-  document.getElementById('phase-text').textContent = PHASE_LABELS[phase] || phase.toUpperCase();
+  const phaseLabel = PHASE_LABELS[phase] || phase.toUpperCase();
+  document.getElementById('phase-text').innerHTML = `<span class="phase-label">${phaseLabel}</span>`;
   document.getElementById('game-time').textContent = `Day ${state.gameDay} · ${String(state.gameHour).padStart(2,'0')}:00`;
+  if (changed) {
+    banner.classList.add('just-changed');
+    setTimeout(() => banner.classList.remove('just-changed'), 400);
+  }
 }
 
 function renderActionBar() {
@@ -2022,13 +2030,9 @@ async function sendCompanionMessage() {
   const placeholder = log.querySelector('.empty-state');
   if (placeholder) placeholder.remove();
 
-  // Show player message
-  const playerEl = document.createElement('div');
-  playerEl.className = 'companion-msg player';
-  playerEl.textContent = msg;
-  log.appendChild(playerEl);
+  // Show player message as a rich bubble
+  appendCompanionBubble(log, 'You', msg, true);
   input.value = '';
-  log.scrollTop = log.scrollHeight;
 
   // Build rich context: recent narrative + current game state
   const phase = state.phase || 'exploring';
@@ -2042,12 +2046,8 @@ async function sendCompanionMessage() {
     state.dungeon ? `${state.dungeon.rooms_cleared || 0} rooms cleared` : '',
   ].filter(Boolean).join('. ');
 
-  // Show typing indicator
-  const typingEl = document.createElement('div');
-  typingEl.className = 'companion-msg companion';
-  typingEl.innerHTML = '<span class="companion-sender">...</span><span class="spinner" style="width:10px;height:10px;border-width:1px"></span>';
-  log.appendChild(typingEl);
-  log.scrollTop = log.scrollHeight;
+  // Show typing indicator as a companion bubble
+  const typingEl = appendCompanionBubble(log, '···', '<span class="spinner" style="width:10px;height:10px;border-width:1px;display:inline-block"></span>', false);
 
   try {
     const res = await fetch('/companion-chat', {
@@ -2061,11 +2061,15 @@ async function sendCompanionMessage() {
       }),
     });
     const data = await res.json();
-    typingEl.innerHTML = `<span class="companion-sender">${data.companion || 'Companion'}</span>${data.reply || '...'}`;
+    const companionName = data.companion || 'Companion';
+    const reply = data.reply || '...';
+    // Replace typing indicator with real response
+    typingEl.querySelector('.companion-sender').textContent = companionName;
+    typingEl.querySelector('.companion-bubble').textContent = reply;
     // Also log in chronicle
-    addLog(`💬 ${data.companion}: "${data.reply}"`, 'system');
+    addLog(`💬 ${companionName}: "${reply}"`, 'system');
   } catch (e) {
-    typingEl.innerHTML = '<span class="companion-sender">Companion</span>*no response*';
+    typingEl.querySelector('.companion-bubble').textContent = '*silence*';
   }
   log.scrollTop = log.scrollHeight;
 }
@@ -2283,20 +2287,25 @@ function setupHandlers() {
 
     const room = payload.room;
     if (room) {
-      currentRoomData = room;
-      sceneImageSeed = Math.floor(Math.random() * 99999);
-      generateSceneImage(room);
-      if (laMap && state.dungeon) laMap.render(state.dungeon);
-      updateMapProgress();
+      triggerRoomTransition(() => {
+        currentRoomData = room;
+        sceneImageSeed = Math.floor(Math.random() * 99999);
+        generateSceneImage(room);
+        if (laMap && state.dungeon) laMap.render(state.dungeon);
+        updateMapProgress();
+        renderPhaseBanner();
+        renderActionBar();
+        renderEnemies();
+      });
+    } else {
+      renderPhaseBanner();
+      renderActionBar();
+      renderEnemies();
     }
 
     if (payload.narrative) {
-      addLog(payload.narrative, 'narrative');
+      typewriterLog(payload.narrative, 'narrative');
     }
-
-    renderPhaseBanner();
-    renderActionBar();
-    renderEnemies();
   });
 
   // Combat updates
@@ -2345,6 +2354,25 @@ function setupHandlers() {
         statsEl.classList.add('hit-flash');
         setTimeout(() => statsEl.classList.remove('hit-flash'), 400);
       }
+      shakeScreen();
+    }
+
+    // Level-up detection
+    const prevLevel = state.player && state.player.stats ? state.player.stats.level : 1;
+    if (payload.player_stats && payload.player_stats.level && payload.player_stats.level > prevLevel) {
+      triggerLevelUp(payload.player_stats.level);
+    }
+
+    // XP / gold toasts
+    if (payload.xp_gained) {
+      const statsEl = document.getElementById('stats-panel');
+      const rect = statsEl ? statsEl.getBoundingClientRect() : { left: window.innerWidth/2, top: 120 };
+      showEarnToast(`+${payload.xp_gained} XP`, rect.left + 60, rect.top + 20);
+    }
+    if (payload.gold_gained) {
+      const statsEl = document.getElementById('stats-panel');
+      const rect = statsEl ? statsEl.getBoundingClientRect() : { left: window.innerWidth/2, top: 120 };
+      showEarnToast(`+${payload.gold_gained}g`, rect.left + 120, rect.top + 45);
     }
   });
 
@@ -2355,7 +2383,7 @@ function setupHandlers() {
     // Show roll summary inline before narrative if present
     if (payload.roll_summary) addLog(payload.roll_summary, 'roll');
     if (text) {
-      addLog(text, 'narrative');
+      typewriterLog(text, 'narrative');
       narratorSpeak(text);
       lastNarrativeHint = text;
       // Track narrative history for companion context
@@ -2495,8 +2523,9 @@ function setupHandlers() {
           document.getElementById('scene-room-name').textContent = startRoom.name || '';
         }
       }
-      if (payload.narrative) addLog(payload.narrative, 'narrative');
+      if (payload.narrative) typewriterLog(payload.narrative, 'narrative');
       addLog(`🗡️ The adventure begins! Use the arrow buttons to explore.`, 'system');
+      startEmbers();
     } else if (event === 'player_joined') {
       addLog(`👤 ${data.player_name || 'A hero'} joined the party!`, 'system');
     } else if (event === 'player_left') {
@@ -2713,4 +2742,155 @@ if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', boot);
 } else {
   boot();
+}
+
+// ═══════════════════════════════════════════════════════
+// INTERACTIVE ENHANCEMENTS
+// ═══════════════════════════════════════════════════════
+
+// ── Typewriter narrative ──
+// Speed: chars per frame (~16ms). 0 = instant fallback.
+const TYPEWRITER_SPEED = 2; // chars per RAF tick
+
+function typewriterLog(text, kind = 'narrative') {
+  const el = document.getElementById('narrative-log');
+  if (!el) { addLog(text, kind); return; }
+
+  const entry = document.createElement('div');
+  entry.className = `log-entry ${kind} typing`;
+  const now = new Date();
+  const timeStr = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+  const cursor = document.createElement('span');
+  cursor.className = 'typing-cursor';
+  entry.appendChild(cursor);
+  el.appendChild(entry);
+  el.scrollTop = el.scrollHeight;
+  while (el.children.length > 100) el.removeChild(el.firstChild);
+
+  const rendered = renderMarkdown(text);
+  // Strip tags to get plain char stream, then type into a span, then set innerHTML at end
+  const temp = document.createElement('div');
+  temp.innerHTML = rendered;
+  const plain = temp.textContent || '';
+  let i = 0;
+  const textNode = document.createElement('span');
+  entry.insertBefore(textNode, cursor);
+
+  function tick() {
+    const charsToAdd = Math.min(TYPEWRITER_SPEED, plain.length - i);
+    i += charsToAdd;
+    textNode.textContent = plain.slice(0, i);
+    el.scrollTop = el.scrollHeight;
+    if (i < plain.length) {
+      requestAnimationFrame(tick);
+    } else {
+      // Replace plain text with rich HTML and remove cursor
+      entry.innerHTML = `${rendered}<span class="log-time">${timeStr}</span>`;
+      entry.classList.remove('typing');
+    }
+  }
+  requestAnimationFrame(tick);
+}
+
+// ── Screen shake on damage ──
+function shakeScreen() {
+  const center = document.querySelector('.game-center');
+  if (!center) return;
+  center.classList.add('shake');
+  setTimeout(() => center.classList.remove('shake'), 420);
+}
+
+// ── Level-up overlay ──
+function triggerLevelUp(newLevel) {
+  const overlay = document.createElement('div');
+  overlay.className = 'level-up-overlay';
+  overlay.innerHTML = `
+    <div class="level-up-text">LEVEL UP</div>
+    <div class="level-up-sub">Level ${newLevel} Achieved</div>
+  `;
+  document.body.appendChild(overlay);
+  setTimeout(() => overlay.remove(), 2700);
+}
+
+// ── Room transition flash ──
+function triggerRoomTransition(callback) {
+  const flash = document.createElement('div');
+  flash.className = 'room-transition';
+  document.body.appendChild(flash);
+  setTimeout(() => {
+    callback();
+    flash.remove();
+  }, 220); // run callback at mid-point of flash
+}
+
+// ── Earn toast (XP / Gold) ──
+function showEarnToast(label, x, y) {
+  const el = document.createElement('div');
+  const isGold = label.includes('gold') || label.includes('g');
+  const isHP   = label.includes('HP');
+  el.className = `toast-earn ${isHP ? 'hp' : isGold ? 'gold' : 'xp'}`;
+  el.textContent = label;
+  el.style.left = `${x}px`;
+  el.style.top  = `${y}px`;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 1700);
+}
+
+// ── Ember particle spawner ──
+let _emberInterval = null;
+function startEmbers() {
+  if (_emberInterval) return;
+  let layer = document.getElementById('ember-layer');
+  if (!layer) {
+    layer = document.createElement('div');
+    layer.id = 'ember-layer';
+    document.body.appendChild(layer);
+  }
+  _emberInterval = setInterval(() => {
+    if (document.getElementById('screen-game') && !document.getElementById('screen-game').classList.contains('active')) return;
+    const e = document.createElement('div');
+    const styles = ['s1','s2','s3','s4'];
+    const sm = Math.random() > 0.6 ? ' sm' : '';
+    e.className = `ember ${styles[Math.floor(Math.random()*4)]}${sm}`;
+    e.style.left = `${Math.random() * 100}vw`;
+    e.style.bottom = '0';
+    const dur = 2.5 + Math.random() * 2.5;
+    e.style.animationDuration = `${dur}s`;
+    layer.appendChild(e);
+    setTimeout(() => e.remove(), dur * 1000 + 200);
+  }, 600);
+}
+function stopEmbers() {
+  if (_emberInterval) { clearInterval(_emberInterval); _emberInterval = null; }
+}
+
+// ── Companion message builder (rich bubbles) ──
+function appendCompanionBubble(log, who, text, isPlayer) {
+  const msg = document.createElement('div');
+  msg.className = `companion-msg${isPlayer ? ' player' : ''}`;
+  msg.innerHTML = `
+    <span class="companion-sender">${who}</span>
+    <div class="companion-bubble">${text}</div>
+  `;
+  log.appendChild(msg);
+  log.scrollTop = log.scrollHeight;
+  return msg;
+}
+
+// ── Enemy death trigger ──
+function triggerEnemyDeath(enemyId) {
+  const el = document.getElementById(`enemy-${enemyId}`);
+  if (!el) return;
+  el.classList.add('dying');
+  setTimeout(() => el.remove(), 600);
+}
+
+// ── Hook: start embers when game screen shows ──
+const _origShowScreen = window.showScreen;
+if (typeof _origShowScreen === 'function') {
+  window.showScreen = function(name, ...args) {
+    _origShowScreen(name, ...args);
+    if (name === 'game') startEmbers();
+    else stopEmbers();
+  };
 }

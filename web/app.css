@@ -176,6 +176,7 @@ html, body {
   font-family: var(--font-title); font-weight: 600; letter-spacing: 1px;
   text-transform: uppercase; transition: all var(--transition);
   padding: 10px 20px; font-size: 11px;
+  position: relative; overflow: hidden;
 }
 .btn:disabled { opacity: 0.4; cursor: not-allowed; pointer-events: none; }
 
@@ -1192,4 +1193,209 @@ html, body {
 .outcome-overlay.game_over .outcome-title { color: var(--red); text-shadow: 0 0 40px var(--red); }
 .outcome-text { font-size: 14px; color: var(--text-dim); max-width: 400px; text-align: center; }
 @keyframes fade-in { from{opacity:0;transform:scale(0.9)} to{opacity:1;transform:none} }
+
+/* ═══════════════════════════════════════════════════════
+   INTERACTIVE ENHANCEMENTS
+   ═══════════════════════════════════════════════════════ */
+
+/* ── Smooth HP / MP bars ── */
+.bar-fill { transition: width 0.55s cubic-bezier(0.4, 0, 0.2, 1); }
+
+/* ── Typewriter cursor ── */
+@keyframes blink-cursor { 0%,100%{opacity:1} 50%{opacity:0} }
+.typing-cursor {
+  display: inline-block; width: 2px; height: 0.85em;
+  background: var(--gold); margin-left: 3px; vertical-align: text-bottom;
+  animation: blink-cursor 0.7s infinite;
+}
+
+/* ── Phase banner slam-in ── */
+@keyframes phase-slam {
+  0%   { opacity:0; transform:translateX(-18px); }
+  65%  { opacity:1; transform:translateX(3px);  }
+  100% { opacity:1; transform:translateX(0);    }
+}
+.phase-label { display:inline-block; }
+.phase-banner.just-changed .phase-label { animation:phase-slam 0.38s ease forwards; }
+
+/* ── Level-up burst ── */
+@keyframes level-burst {
+  0%   { opacity:0; transform:scale(0.55); }
+  18%  { opacity:1; transform:scale(1.06); }
+  60%  { opacity:1; transform:scale(1.01); }
+  100% { opacity:0; transform:scale(1.14); }
+}
+.level-up-overlay {
+  position:fixed; inset:0; z-index:99000; pointer-events:none;
+  display:flex; align-items:center; justify-content:center; flex-direction:column; gap:12px;
+  background:radial-gradient(ellipse at center,rgba(201,168,76,0.38) 0%,transparent 70%);
+  animation:level-burst 2.6s ease forwards;
+}
+.level-up-text {
+  font-family:var(--font-deco); font-size:clamp(30px,6vw,54px);
+  color:var(--gold2); text-align:center; letter-spacing:4px;
+  text-shadow:0 0 40px rgba(240,204,106,0.9),0 0 80px rgba(201,168,76,0.5);
+}
+.level-up-sub {
+  font-family:var(--font-title); font-size:15px; letter-spacing:3px;
+  color:var(--gold); text-transform:uppercase;
+}
+
+/* ── Room transition flash ── */
+@keyframes room-flash { 0%{opacity:0} 30%{opacity:1} 70%{opacity:1} 100%{opacity:0} }
+.room-transition {
+  position:fixed; inset:0; z-index:97000; pointer-events:none;
+  background:#0a0908; animation:room-flash 0.44s ease forwards;
+}
+
+/* ── Floating ember particles ── */
+@keyframes ember-1 { 0%{opacity:.9;transform:translate(0,0) scale(1)} 100%{opacity:0;transform:translate(22px,-200px) scale(.25)} }
+@keyframes ember-2 { 0%{opacity:.7;transform:translate(0,0) scale(.9)} 100%{opacity:0;transform:translate(-18px,-220px) scale(.15)} }
+@keyframes ember-3 { 0%{opacity:.8;transform:translate(0,0) scale(.8)} 100%{opacity:0;transform:translate(10px,-170px) scale(.1)} }
+@keyframes ember-4 { 0%{opacity:.6;transform:translate(0,0) scale(1.1)} 100%{opacity:0;transform:translate(-25px,-190px) scale(.2)} }
+.ember {
+  position:absolute; border-radius:50%; pointer-events:none;
+  background:var(--gold); width:3px; height:3px;
+  box-shadow:0 0 5px var(--gold), 0 0 10px rgba(201,168,76,.5);
+}
+.ember.s1{animation:ember-1 3s ease-in forwards}
+.ember.s2{animation:ember-2 3.8s ease-in forwards}
+.ember.s3{animation:ember-3 4.2s ease-in forwards}
+.ember.s4{animation:ember-4 2.8s ease-in forwards}
+.ember.sm { width:2px; height:2px; background:var(--ember); box-shadow:0 0 3px var(--ember); }
+#ember-layer {
+  position:fixed; inset:0; pointer-events:none; z-index:1;
+  overflow:hidden;
+}
+
+/* ── Attack button — dramatic ── */
+.attack-btn {
+  background: linear-gradient(135deg, #3d0c0c 0%, #791818 50%, #3d0c0c 100%);
+  border: 1.5px solid rgba(212,69,62,0.72);
+  border-radius: var(--radius);
+  color: #ff8a80;
+  font-family: var(--font-title);
+  font-size: 13px; font-weight: 700; letter-spacing: 3px;
+  padding: 12px 28px; cursor: pointer;
+  text-shadow: 0 0 10px rgba(212,69,62,.65);
+  box-shadow: 0 0 22px rgba(140,18,18,.55), inset 0 1px 0 rgba(255,120,120,.14);
+  transition: all 0.14s ease;
+  position: relative; overflow: hidden;
+}
+.attack-btn:hover {
+  background: linear-gradient(135deg, #5a1515 0%, #9b2020 50%, #5a1515 100%);
+  box-shadow: 0 0 36px rgba(200,28,28,.75), inset 0 1px 0 rgba(255,120,120,.26);
+  transform: translateY(-1px);
+}
+.attack-btn:active { transform: translateY(1px) scale(0.975); }
+.attack-btn::after {
+  content:''; position:absolute; inset:0;
+  background: linear-gradient(135deg, transparent 38%, rgba(255,100,100,.12) 50%, transparent 62%);
+  transform: translateX(-150%); transition: transform 0.42s ease;
+}
+.attack-btn:hover::after { transform: translateX(150%); }
+
+/* ── Flee button ── */
+.flee-btn {
+  background: transparent;
+  border: 1px solid rgba(160,140,100,.25);
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  font-family: var(--font-title); font-size: 10px; letter-spacing: 1px;
+  padding: 8px 16px; cursor: pointer; transition: all .2s ease;
+}
+.flee-btn:hover { border-color: var(--amber); color: var(--amber); background: rgba(212,165,74,.06); }
+
+/* ── Better enemy cards ── */
+.enemy-card {
+  background: linear-gradient(135deg, var(--surface2) 0%, rgba(50,8,8,.45) 100%);
+  border-color: rgba(180,30,30,.28);
+  box-shadow: inset 0 0 20px rgba(0,0,0,.3);
+}
+.enemy-card:not(.dead):not(.dying):hover {
+  border-color: rgba(212,69,62,.5);
+  box-shadow: 0 0 14px rgba(180,30,30,.22), inset 0 0 20px rgba(0,0,0,.3);
+}
+
+/* ── Enemy death animation ── */
+@keyframes enemy-death {
+  0%  { transform:none; opacity:1; filter:none; }
+  22% { transform:scale(1.06); filter:brightness(1.9) saturate(0) sepia(1); }
+  100%{ transform:scale(0.7) translateY(14px); opacity:0; filter:brightness(2) saturate(0); }
+}
+.enemy-card.dying { animation:enemy-death 0.58s ease forwards; pointer-events:none; }
+
+/* ── Companion chat bubbles ── */
+.companion-log {
+  padding: 8px; display:flex; flex-direction:column; gap:7px;
+  overflow-y:auto; flex:1; min-height:0;
+}
+.companion-msg { display:flex; flex-direction:column; gap:3px; animation:log-in .22s ease; }
+.companion-msg.player { align-items:flex-end; }
+.companion-msg:not(.player) { align-items:flex-start; }
+.companion-sender {
+  font-size:9px; font-family:var(--font-title); letter-spacing:1px;
+  color:var(--gold); text-transform:uppercase; margin-bottom:1px;
+}
+.companion-msg.player .companion-sender { color:var(--text-muted); }
+.companion-bubble {
+  max-width: 85%; padding: 7px 11px; font-size:12px; line-height:1.55;
+  border-radius: 10px;
+}
+.companion-msg:not(.player) .companion-bubble {
+  background:var(--surface2); border:1px solid var(--border);
+  border-bottom-left-radius: 3px; color:var(--text);
+}
+.companion-msg.player .companion-bubble {
+  background:rgba(201,168,76,.09); border:1px solid rgba(201,168,76,.2);
+  border-bottom-right-radius: 3px; color:var(--text-dim);
+}
+
+/* ── Contextual action button stagger ── */
+.contextual-action-btn { animation:log-in .22s ease backwards; }
+.contextual-action-btn:nth-child(1){animation-delay:0ms}
+.contextual-action-btn:nth-child(2){animation-delay:55ms}
+.contextual-action-btn:nth-child(3){animation-delay:110ms}
+.contextual-action-btn:nth-child(4){animation-delay:165ms}
+.contextual-action-btn:nth-child(5){animation-delay:220ms}
+.contextual-action-btn:nth-child(6){animation-delay:275ms}
+
+/* ── Button ripple ── */
+.btn::after {
+  content:''; position:absolute; inset:0;
+  background:radial-gradient(circle,rgba(255,255,255,.13) 0%,transparent 70%);
+  transform:scale(0); opacity:0;
+  transition:transform .3s ease,opacity .3s ease;
+  border-radius:inherit; pointer-events:none;
+}
+.btn:active::after { transform:scale(2.5); opacity:1; transition:none; }
+
+/* ── Stat dex warm color ── */
+.stat-dex { color: var(--amber); }
+
+/* ── Narrative log typing indicator ── */
+.log-entry.typing { opacity:.75; }
+.log-entry.typing .typing-cursor { display:inline-block; }
+
+/* ── XP/Gold earned toast ── */
+.toast-earn {
+  position:fixed; z-index:98000; pointer-events:none;
+  font-family:var(--font-title); font-size:13px; font-weight:700; letter-spacing:1px;
+  text-shadow:0 0 12px currentColor;
+  animation:float-up 1.6s ease forwards;
+}
+.toast-earn.xp  { color:var(--gold2); }
+.toast-earn.gold{ color:var(--amber); }
+.toast-earn.hp  { color:var(--green); }
+
+/* ── Phase banner time ── */
+.game-time { font-size:10px; color:var(--text-muted); font-family:var(--font-mono); }
+
+/* ── Narrative log first-appear entry ── */
+.log-entry { animation:log-in .25s ease; }
+
+/* ── Scene wrapper ember overlay ── */
+.scene-ember-overlay {
+  position:absolute; inset:0; pointer-events:none; overflow:hidden; z-index:2;
+}
 
