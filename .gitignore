@@ -2,6 +2,9 @@
 .env
 LOCAL_SETUP.md
 
+# Private notes (owner only)
+PRIVATE_README.md
+
 # Python
 __pycache__/
 *.py[cod]
