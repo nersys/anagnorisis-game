@@ -602,33 +602,53 @@ function _pickNarratorVoice() {
   return _narratorVoice;
 }
 
+// Queue of texts to speak (used when voices not loaded yet)
+let _narratorQueue = [];
+let _narratorReady = false;
+
+// Pre-load voices and mark ready; trigger queued speech
+if ('speechSynthesis' in window) {
+  const _initVoices = () => {
+    const voices = speechSynthesis.getVoices();
+    if (voices.length) {
+      _narratorReady = true;
+      _narratorVoice = null; // force re-pick with loaded voices
+      if (_narratorQueue.length) {
+        const pending = _narratorQueue.pop(); // speak only latest
+        _narratorQueue = [];
+        narratorSpeak(pending);
+      }
+    }
+  };
+  speechSynthesis.onvoiceschanged = _initVoices;
+  _initVoices(); // works synchronously in some browsers
+}
+
 function narratorSpeak(text) {
   if (!narratorEnabled || !('speechSynthesis' in window)) return;
-  // Strip markdown, dice tags, emoji, and excess whitespace
+
   const clean = text
     .replace(/\[\[ROLL:[^\]]+\]\]/g, '')
-    .replace(/[🎲✅❌💥💀⚀⚁⚂⚃⚄⚅🔊🔇🎨📜🍺⚔️🌟]/gu, '')
+    .replace(/[\u{1F300}-\u{1FAFF}]/gu, '')  // strip emoji
     .replace(/\*{1,2}([^*]+)\*{1,2}/g, '$1')
     .replace(/#+\s/g, '')
     .replace(/\s+/g, ' ')
     .trim();
   if (!clean) return;
 
-  speechSynthesis.cancel(); // Stop any current speech before starting new
-  const utter = new SpeechSynthesisUtterance(clean);
-  utter.rate = 0.88;      // Slightly slower = more dramatic
-  utter.pitch = 0.85;     // Slightly lower pitch = more gravitas
-  utter.volume = 1.0;
+  if (!_narratorReady) {
+    // Voices not loaded yet — queue and wait
+    _narratorQueue = [clean];
+    return;
+  }
 
-  // Voices may not be loaded yet on first call
+  speechSynthesis.cancel();
+  const utter = new SpeechSynthesisUtterance(clean);
+  utter.rate = 0.88;
+  utter.pitch = 0.85;
+  utter.volume = 1.0;
   const voice = _pickNarratorVoice();
   if (voice) utter.voice = voice;
-  else speechSynthesis.onvoiceschanged = () => {
-    _narratorVoice = null;
-    const v = _pickNarratorVoice();
-    if (v) utter.voice = v;
-  };
-
   speechSynthesis.speak(utter);
 }
 
@@ -2505,6 +2525,18 @@ function boot() {
   showScreen('login');
   initGPS();
 }
+
+// Unlock Web Speech on the first user interaction (browsers block autoplay until gesture)
+let _speechUnlocked = false;
+document.addEventListener('click', function _unlockSpeech() {
+  if (_speechUnlocked || !('speechSynthesis' in window)) return;
+  _speechUnlocked = true;
+  // Fire a zero-length utterance to unblock the audio context
+  const u = new SpeechSynthesisUtterance('');
+  u.volume = 0;
+  speechSynthesis.speak(u);
+  document.removeEventListener('click', _unlockSpeech);
+}, { once: true });
 
 // Script is at bottom of <body> — DOM already parsed, call directly
 if (document.readyState === 'loading') {
