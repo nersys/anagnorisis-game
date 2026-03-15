@@ -580,7 +580,7 @@ let selectedDifficulty = 'normal';
 let currentRoomData = null;
 let sceneImageSeed = 1;
 let _gpsReady = false;
-let narratorEnabled = false;   // narrator is OFF by default; user toggles with 🔇/🔊
+let narratorEnabled = true;    // narrator is ON by default; user toggles with 🔊/🔇
 let _narratorVoice = null;     // cached preferred voice
 
 // ═══════════════════════════════════════════════════════
