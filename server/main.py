@@ -126,6 +126,15 @@ async def root():
     }
 
 
+@app.get("/api/config")
+async def get_public_config():
+    """Return public client configuration from env."""
+    from fastapi.responses import JSONResponse
+    return JSONResponse({
+        "bloodlust_url": os.getenv("BLOODLUST_URL", "https://www.youtube.com/watch?v=YePpuaIi8c4"),
+        "bloodlust_end_sec": int(os.getenv("BLOODLUST_END_SEC", "2")),
+    })
+
 @app.get("/")
 async def serve_web():
     """Serve the web client."""
@@ -158,14 +167,13 @@ async def generate_scene_art(
                 "concept art style, wide panoramic shot, 16:9 aspect ratio."
             )
             resp = await client.images.generate(
-                model="dall-e-3",
-                prompt=dalle_prompt,
-                size="1792x1024",
-                quality="standard",
+                model="dall-e-2",
+                prompt=dalle_prompt[:1000],  # DALL-E 2 limit
+                size="512x512",
                 n=1,
             )
             image_url = resp.data[0].url
-            logger.info(f"🎨 DALL-E 3 image generated for: {prompt[:50]}")
+            logger.info(f"🎨 DALL-E 2 image generated for: {prompt[:50]}")
             # Return JSON with URL so client can use it directly (avoids CORS/redirect issues)
             from fastapi.responses import JSONResponse
             return JSONResponse({"url": image_url, "source": "dalle3"})

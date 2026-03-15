@@ -1006,6 +1006,102 @@ function initGame() {
     }
   });
 
+  // ── Public config (env-driven features) ──
+  let appConfig = { bloodlust_url: 'https://www.youtube.com/watch?v=YePpuaIi8c4', bloodlust_end_sec: 2 };
+  fetch('/api/config').then(r => r.ok ? r.json() : null).then(cfg => { if (cfg) appConfig = cfg; }).catch(() => {});
+
+  // ── Bloodlust effect button ──
+  (function setupBloodlust() {
+    const btn = document.getElementById('btn-bloodlust');
+    if (!btn) return;
+
+    let ytPlayer = null;
+    let ytReady = false;
+    let pendingPlay = false;
+
+    // Inject YouTube IFrame API script once
+    function ensureYTApi() {
+      if (window.YT && window.YT.Player) { ytReady = true; return; }
+      if (document.getElementById('yt-api-script')) return;
+      const s = document.createElement('script');
+      s.id = 'yt-api-script';
+      s.src = 'https://www.youtube.com/iframe_api';
+      document.head.appendChild(s);
+    }
+
+    window.onYouTubeIframeAPIReady = function() {
+      ytReady = true;
+      if (pendingPlay) { pendingPlay = false; playBloodlust(); }
+    };
+
+    function getVideoId(url) {
+      try {
+        const u = new URL(url);
+        return u.searchParams.get('v') || u.pathname.split('/').pop();
+      } catch { return null; }
+    }
+
+    function playBloodlust() {
+      const vid = getVideoId(appConfig.bloodlust_url);
+      if (!vid) return;
+      const end = appConfig.bloodlust_end_sec || 2;
+
+      // Screen flash effect
+      const flash = document.createElement('div');
+      flash.style.cssText = `
+        position:fixed;inset:0;z-index:99999;pointer-events:none;
+        background:radial-gradient(ellipse at center,rgba(180,0,0,0.55) 0%,rgba(80,0,0,0.2) 60%,transparent 100%);
+        animation:bloodflash 0.8s ease-out forwards;
+      `;
+      if (!document.getElementById('bloodflash-style')) {
+        const css = document.createElement('style');
+        css.id = 'bloodflash-style';
+        css.textContent = `@keyframes bloodflash{0%{opacity:1}100%{opacity:0}}`;
+        document.head.appendChild(css);
+      }
+      document.body.appendChild(flash);
+      setTimeout(() => flash.remove(), 800);
+
+      // Hidden YT player div
+      let container = document.getElementById('yt-bloodlust-container');
+      if (!container) {
+        container = document.createElement('div');
+        container.id = 'yt-bloodlust-container';
+        container.style.cssText = 'position:fixed;width:1px;height:1px;opacity:0.01;pointer-events:none;bottom:0;right:0;z-index:-1;overflow:hidden;';
+        document.body.appendChild(container);
+        const playerDiv = document.createElement('div');
+        playerDiv.id = 'yt-bloodlust-player';
+        container.appendChild(playerDiv);
+        ytPlayer = null;
+      }
+
+      if (ytPlayer) {
+        ytPlayer.seekTo(0);
+        ytPlayer.playVideo();
+        setTimeout(() => { try { ytPlayer.pauseVideo(); } catch(e) {} }, end * 1000 + 200);
+      } else {
+        ytPlayer = new window.YT.Player('yt-bloodlust-player', {
+          height: '1', width: '1',
+          videoId: vid,
+          playerVars: { autoplay: 1, start: 0, end, controls: 0, mute: 0 },
+          events: {
+            onReady: e => {
+              e.target.setVolume(100);
+              e.target.playVideo();
+              setTimeout(() => { try { e.target.pauseVideo(); } catch(err) {} }, end * 1000 + 200);
+            }
+          }
+        });
+      }
+    }
+
+    btn.addEventListener('click', () => {
+      ensureYTApi();
+      if (ytReady) playBloodlust();
+      else pendingPlay = true;
+    });
+  })();
+
   // ── Companion chat ──
   const companionInput = document.getElementById('companion-input');
   document.getElementById('btn-companion-send').addEventListener('click', sendCompanionMessage);
