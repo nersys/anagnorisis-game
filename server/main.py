@@ -161,13 +161,13 @@ async def generate_scene_art(
         try:
             import openai as openai_lib
             client = openai_lib.AsyncOpenAI(api_key=openai_key)
-            dalle_prompt = (
-                f"Dark fantasy RPG game scene: {prompt}. "
-                "Atmospheric cinematic oil painting, dramatic lighting, "
-                "concept art style, wide panoramic shot, 16:9 aspect ratio."
-            )
             dalle_model = os.getenv("DALLE_MODEL", "dall-e-2")
             dalle_size = "1792x1024" if dalle_model == "dall-e-3" else "512x512"
+            dalle_prompt = (
+                f"Dark fantasy RPG environment: {prompt}. "
+                "Atmospheric cinematic oil painting, dramatic lighting, "
+                "concept art, wide shot. No text, no words, no labels, no captions, no UI."
+            )
             resp = await client.images.generate(
                 model=dalle_model,
                 prompt=dalle_prompt[:1000],

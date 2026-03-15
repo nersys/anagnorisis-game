@@ -20,39 +20,21 @@ For MVP, we keep it simple. In production:
 """
 
 import logging
+import re
 from typing import Optional
 
 from anthropic import Anthropic, APIError
 
 from shared.models import Adventure, Player, AdventureMode, Room
+from server.dm_prompt import build_system_prompt
+
+# Regex to detect a dice roll request embedded by the DM in its response.
+# Format: [[ROLL:d20:STAT:DC]]  e.g. [[ROLL:d20:STR:12]]
+DICE_TAG_RE = re.compile(r'\[\[ROLL:(d\d+):([A-Z]+):(\d+)\]\]', re.IGNORECASE)
 
 logger = logging.getLogger("anagnorisis.dm")
 
-
-# System prompts for different adventure modes
-SYSTEM_PROMPTS = {
-    AdventureMode.FREEFORM: """You are the Dungeon Master for a freeform fantasy RPG adventure. 
-You have complete creative freedom to craft the narrative. 
-Be descriptive, dramatic, and responsive to player actions.
-Create interesting NPCs, locations, and challenges on the fly.
-Keep responses to 2-3 paragraphs for good pacing.""",
-    
-    AdventureMode.STRUCTURED: """You are the Dungeon Master for a structured fantasy RPG adventure.
-Follow traditional D&D-style rules strictly:
-- Request dice rolls for skill checks (specify DC)
-- Track combat with initiative and turns
-- Enforce class abilities and spell slots
-- Apply damage and healing precisely
-Keep responses focused on mechanics while maintaining narrative flavor.""",
-    
-    AdventureMode.GUIDED: """You are the Dungeon Master for a guided fantasy RPG adventure.
-Balance narrative freedom with game structure:
-- Use skill checks for uncertain outcomes
-- Keep combat engaging but not overly complex
-- Allow creative solutions while maintaining challenge
-- Weave character backstories into the narrative
-Be descriptive and atmospheric. 2-3 paragraphs per response.""",
-}
+MAX_HISTORY_TURNS = 30  # keep last N user+assistant pairs in context
 
 
 class AIDungeonMaster:
@@ -154,54 +136,39 @@ The air is thick with anticipation. What do you do?"""
         acting_player: Player,
         party: list[Player],
         action: str,
-        conversation_history: Optional[list[dict]] = None
     ) -> str:
-        """
-        Process a player action and generate the DM response.
-        
-        Args:
-            adventure: The current adventure
-            acting_player: The player taking the action
-            party: All party members
-            action: What the player wants to do
-            conversation_history: Previous exchanges (for context)
-        
-        Returns:
-            The DM's narrative response
-        """
+        """Process a player action, maintain conversation memory, return DM response."""
         party_context = self._build_party_context(party)
-        
-        prompt = f"""Current Adventure: {adventure.name}
-Day {adventure.game_day}
+        user_msg = (
+            f"[Day {adventure.game_day} | {acting_player.name} the {acting_player.player_class.value}]\n"
+            f"{action}\n\n"
+            f"Party: {party_context}"
+        )
 
-{party_context}
+        # Use rolling adventure conversation log as memory
+        history = list(adventure.conversation_log[-MAX_HISTORY_TURNS:])
+        history.append({"role": "user", "content": user_msg})
 
-{acting_player.name} the {acting_player.player_class.value} says: "{action}"
+        system = build_system_prompt(dungeon_name=adventure.name)
 
-Respond as the Dungeon Master:
-- Describe the outcome of their action
-- Include any relevant skill checks or rolls if appropriate
-- Advance the story naturally
-- End with the new situation or subtle prompt for next action
-
-Keep response to 2-3 paragraphs."""
-
-        # Build messages including history if provided
-        messages = []
-        if conversation_history:
-            messages.extend(conversation_history[-10:])  # Last 10 exchanges for context
-        messages.append({"role": "user", "content": prompt})
-        
         try:
             response = self._client.messages.create(
                 model=self._model,
-                max_tokens=1024,
-                system=SYSTEM_PROMPTS.get(adventure.mode, SYSTEM_PROMPTS[AdventureMode.GUIDED]),
-                messages=messages
+                max_tokens=400,  # Enforce brevity
+                system=system,
+                messages=history,
             )
-            
-            return response.content[0].text
-            
+            text = response.content[0].text
+
+            # Append both sides to adventure memory
+            adventure.conversation_log.append({"role": "user", "content": user_msg})
+            adventure.conversation_log.append({"role": "assistant", "content": text})
+            # Trim to cap memory
+            if len(adventure.conversation_log) > MAX_HISTORY_TURNS * 2:
+                adventure.conversation_log = adventure.conversation_log[-(MAX_HISTORY_TURNS * 2):]
+
+            return text
+
         except APIError as e:
             logger.error(f"API error processing action: {e}")
             return self._fallback_action_response(acting_player, action)
@@ -209,6 +176,77 @@ Keep response to 2-3 paragraphs."""
             logger.error(f"Error processing action: {e}")
             return self._fallback_action_response(acting_player, action)
     
+    @staticmethod
+    def extract_dice_request(text: str) -> Optional[dict]:
+        """Parse a [[ROLL:d20:STAT:DC]] tag from DM response. Returns dict or None."""
+        m = DICE_TAG_RE.search(text)
+        if not m:
+            return None
+        return {
+            "die": m.group(1).lower(),        # e.g. "d20"
+            "stat": m.group(2).upper(),        # e.g. "STR"
+            "dc": int(m.group(3)),             # e.g. 12
+            "raw_tag": m.group(0),
+        }
+
+    @staticmethod
+    def strip_dice_tag(text: str) -> str:
+        """Remove [[ROLL:...]] tag from text."""
+        return DICE_TAG_RE.sub('', text).strip()
+
+    async def resolve_with_roll(
+        self,
+        adventure: Adventure,
+        acting_player: Player,
+        party: list[Player],
+        original_action: str,
+        setup_narrative: str,
+        roll_total: int,
+        dc: int,
+        stat: str,
+        die: str,
+    ) -> str:
+        """
+        Called after the player rolls. Feeds the roll result back to the DM
+        to get the resolution narrative (success or failure).
+        """
+        success = roll_total >= dc
+        outcome = "SUCCESS" if success else "FAILURE"
+
+        prompt = (
+            f"The player attempted: \"{original_action}\"\n\n"
+            f"You (the DM) had set up this scene:\n{setup_narrative}\n\n"
+            f"The player rolled {die} + {stat} modifier = {roll_total} vs DC {dc}.\n"
+            f"Result: {outcome}.\n\n"
+            f"Now describe the outcome in 1-2 paragraphs. Be dramatic. "
+            f"On success, let them achieve their goal with flair. "
+            f"On failure, something goes wrong — but keep the story moving. "
+            f"Do NOT include another [[ROLL]] tag."
+        )
+
+        # Use adventure memory so the DM remembers the full context
+        history = list(adventure.conversation_log[-MAX_HISTORY_TURNS:])
+        history.append({"role": "user", "content": prompt})
+
+        try:
+            response = self._client.messages.create(
+                model=self._model,
+                max_tokens=300,
+                system=build_system_prompt(dungeon_name=adventure.name),
+                messages=history,
+            )
+            text = response.content[0].text
+            # Append resolution to memory
+            adventure.conversation_log.append({"role": "user", "content": prompt})
+            adventure.conversation_log.append({"role": "assistant", "content": text})
+            return text
+        except Exception as e:
+            logger.error(f"Error resolving roll: {e}")
+            if success:
+                return f"With a roll of {roll_total} against DC {dc}, you succeed! Your action pays off."
+            else:
+                return f"With a roll of {roll_total} against DC {dc}, you fail. Something goes wrong..."
+
     def _fallback_action_response(self, player: Player, action: str) -> str:
         """Fallback response when API fails."""
         return f"""{player.name} attempts to {action.lower()}.

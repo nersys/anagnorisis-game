@@ -63,6 +63,8 @@ class MessageType(str, Enum):
     DUNGEON_STATE = "dungeon_state"
     COMBAT_UPDATE = "combat_update"
     ROOM_ENTERED = "room_entered"
+    DICE_ROLL_REQUIRED = "dice_roll_required"
+    DICE_RESULT = "dice_result"
 
     # System
     ERROR = "error"
@@ -171,6 +173,9 @@ class Adventure(BaseModel):
     game_day: int = 1  # Internal game clock
     started_at: datetime = Field(default_factory=datetime.utcnow)
     last_activity: datetime = Field(default_factory=datetime.utcnow)
+    # Rolling conversation log: list of {"role": "user"|"assistant", "content": str}
+    # Kept to last 30 turns to avoid ballooning token usage
+    conversation_log: list[dict] = Field(default_factory=list)
 
 
 # ============================================

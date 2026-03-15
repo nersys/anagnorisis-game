@@ -94,6 +94,8 @@ class GameEngine:
         self._player_phase: dict[str, GamePhase] = {}
         # Per-player buff tracking
         self._player_attack_buff: dict[str, int] = {}  # player_id -> bonus attack
+        # Pending dice rolls: player_id -> {action, setup_narrative, die, stat, dc, party_id}
+        self._pending_dice: dict[str, dict] = {}
     
     async def initialize(self) -> None:
         """Initialize the game engine."""
@@ -146,6 +148,7 @@ class GameEngine:
             MessageType.LOOT_ROOM: self._handle_loot_room,
             MessageType.USE_ITEM: self._handle_use_item,
             MessageType.TAVERN_VISIT: self._handle_tavern_visit,
+            MessageType.DICE_RESULT: self._handle_dice_result,
         }
         
         handler = handlers.get(message.type)
@@ -646,25 +649,114 @@ class GameEngine:
             response = await self._dm.process_action(adventure, player, party_members, action_text)
         else:
             response = f"[AI DM not available] {player.name} attempts to: {action_text}"
-        
-        # Update last activity
+
         adventure.last_activity = datetime.utcnow()
-        
-        # Broadcast the action and response to the party
-        action_event = GameMessage(
+
+        # Check if the DM embedded a dice roll request
+        if self._dm:
+            roll_req = self._dm.extract_dice_request(response)
+        else:
+            roll_req = None
+
+        if roll_req:
+            setup = self._dm.strip_dice_tag(response)
+            # Store pending roll so we can resolve it when the client sends the result
+            self._pending_dice[player_id] = {
+                "action": action_text,
+                "setup_narrative": setup,
+                "die": roll_req["die"],
+                "stat": roll_req["stat"],
+                "dc": roll_req["dc"],
+                "party_id": party.id,
+                "adventure_id": adventure.id,
+            }
+            # Send setup narrative + roll request to client
+            await manager.broadcast_to_party(party.id, GameMessage(
+                type=MessageType.DM_RESPONSE,
+                payload={"player_name": player.name, "action": action_text, "narrative": setup},
+            ))
+            await manager.send_to_connection(connection_id, GameMessage(
+                type=MessageType.DICE_ROLL_REQUIRED,
+                payload={
+                    "die": roll_req["die"],
+                    "stat": roll_req["stat"],
+                    "dc": roll_req["dc"],
+                    "player_id": player_id,
+                },
+            ))
+        else:
+            await manager.broadcast_to_party(party.id, GameMessage(
+                type=MessageType.DM_RESPONSE,
+                payload={
+                    "player_name": player.name,
+                    "action": action_text,
+                    "narrative": response,
+                    "game_day": self._current_game_day,
+                    "game_hour": self._current_game_hour,
+                },
+            ))
+
+        return None  # Response already broadcast
+    
+    async def _handle_dice_result(
+        self,
+        connection_id: str,
+        message: GameMessage,
+        manager: ConnectionManager,
+    ) -> GameMessage:
+        """Player sends back their dice roll result; DM resolves the outcome."""
+        player_id = self._connection_to_player.get(connection_id)
+        if not player_id:
+            return GameMessage(type=MessageType.ERROR, payload={"error": "Not connected"})
+
+        pending = self._pending_dice.pop(player_id, None)
+        if not pending:
+            return GameMessage(type=MessageType.ERROR, payload={"error": "No pending dice roll"})
+
+        roll_total = int(message.payload.get("total", 10))
+        raw_roll = int(message.payload.get("raw", roll_total))
+        modifier = int(message.payload.get("modifier", 0))
+
+        player = self._players.get(player_id)
+        adventure = self._adventures.get(pending["adventure_id"])
+        party = self._parties.get(pending["party_id"])
+
+        if not adventure or not player or not party:
+            return GameMessage(type=MessageType.ERROR, payload={"error": "Adventure not found"})
+
+        party_members = [self._players[pid] for pid in party.member_ids if pid in self._players]
+
+        resolution = await self._dm.resolve_with_roll(
+            adventure=adventure,
+            acting_player=player,
+            party=party_members,
+            original_action=pending["action"],
+            setup_narrative=pending["setup_narrative"],
+            roll_total=roll_total,
+            dc=pending["dc"],
+            stat=pending["stat"],
+            die=pending["die"],
+        )
+
+        success = roll_total >= pending["dc"]
+        roll_summary = (
+            f"🎲 {pending['die'].upper()} roll: {raw_roll}"
+            + (f" + {modifier} ({pending['stat']})" if modifier != 0 else "")
+            + f" = **{roll_total}** vs DC {pending['dc']} → {'✅ SUCCESS' if success else '❌ FAILURE'}"
+        )
+
+        await manager.broadcast_to_party(pending["party_id"], GameMessage(
             type=MessageType.DM_RESPONSE,
             payload={
                 "player_name": player.name,
-                "action": action_text,
-                "narrative": response,
-                "game_day": self._current_game_day,
-                "game_hour": self._current_game_hour,
-            }
-        )
-        await manager.broadcast_to_party(party.id, action_event)
-        
-        return None  # Response already broadcast
-    
+                "action": f"[Roll: {roll_summary}]",
+                "narrative": resolution,
+                "roll_summary": roll_summary,
+                "roll_success": success,
+            },
+        ))
+        return None
+
     # ============================================
     # Dungeon Movement
     # ============================================
