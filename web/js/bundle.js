@@ -964,109 +964,46 @@ function initGame() {
     }
   });
 
-  // ── Music toggle (ambient dungeon atmosphere via Web Audio) ──
-  let audioCtx = null;
-  let musicNodes = [];
-  let musicOn = false;
-  let chordTimer = null;
+  // ── Music: Spotify embed widget ──
+  // Dark fantasy RPG ambient playlist — change SPOTIFY_PLAYLIST_ID to use your own
+  const SPOTIFY_PLAYLIST_ID = '37i9dQZF1DX8vZlsdZPjzn'; // "Epic & Dramatic" — works well for RPG
+  let spotifyOpen = false;
+  let spotifyEl = null;
 
-  // Pentatonic minor scale in Hz (A2 root): A2 C3 D3 E3 G3 A3 C4 D4 E4 G4
-  const SCALE = [110, 130.8, 146.8, 164.8, 196, 220, 261.6, 293.7, 329.6, 392];
-  // Chord shapes as scale indices
-  const CHORDS = [[0,2,4,7],[0,3,5,8],[2,4,6,9],[1,3,5,7]];
-
-  function makeOsc(ctx, freq, type, gain, dest) {
-    const osc = ctx.createOscillator();
-    const g = ctx.createGain();
-    osc.type = type;
-    osc.frequency.value = freq;
-    g.gain.value = gain;
-    osc.connect(g); g.connect(dest);
-    osc.start();
-    return { osc, gain: g };
-  }
-
-  function startMusic() {
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    const masterGain = audioCtx.createGain();
-    masterGain.gain.value = 0.4;
-
-    // Reverb via ConvolverNode (impulse response simulation)
-    const convolver = audioCtx.createConvolver();
-    const irLen = audioCtx.sampleRate * 2.5;
-    const irBuf = audioCtx.createBuffer(2, irLen, audioCtx.sampleRate);
-    for (let ch = 0; ch < 2; ch++) {
-      const d = irBuf.getChannelData(ch);
-      for (let i = 0; i < irLen; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / irLen, 2.5);
-    }
-    convolver.buffer = irBuf;
-    const reverbGain = audioCtx.createGain(); reverbGain.gain.value = 0.35;
-    masterGain.connect(convolver); convolver.connect(reverbGain); reverbGain.connect(audioCtx.destination);
-    masterGain.connect(audioCtx.destination);
-
-    // Drone: deep sub bass
-    const { osc: bass } = makeOsc(audioCtx, SCALE[0] / 2, 'sine', 0.18, masterGain);
-
-    // Slow LFO breathing on master volume
-    const breathLfo = audioCtx.createOscillator();
-    const breathGain = audioCtx.createGain(); breathGain.gain.value = 0.06;
-    breathLfo.frequency.value = 0.08; breathLfo.connect(breathGain); breathGain.connect(masterGain.gain);
-    breathLfo.start();
-
-    musicNodes = [bass, breathLfo];
-    let chordIdx = 0;
-
-    function playChord() {
-      if (!audioCtx) return;
-      const now = audioCtx.currentTime;
-      const chord = CHORDS[chordIdx % CHORDS.length];
-      chordIdx++;
-
-      chord.forEach((si, i) => {
-        const freq = SCALE[si % SCALE.length];
-        const osc = audioCtx.createOscillator();
-        const env = audioCtx.createGain();
-        osc.type = i === 0 ? 'triangle' : 'sine';
-        osc.frequency.value = freq;
-        // Slight detune for warmth
-        osc.detune.value = (Math.random() - 0.5) * 8;
-        env.gain.setValueAtTime(0, now);
-        env.gain.linearRampToValueAtTime(0.07 / (i + 1), now + 0.3);
-        env.gain.setTargetAtTime(0, now + 4.5, 1.5);
-        osc.connect(env); env.connect(masterGain);
-        osc.start(now); osc.stop(now + 8);
-      });
-
-      // Occasional plucked high note
-      if (Math.random() < 0.4) {
-        const hi = SCALE[4 + Math.floor(Math.random() * 5)];
-        const osc = audioCtx.createOscillator();
-        const env = audioCtx.createGain();
-        osc.type = 'triangle'; osc.frequency.value = hi * 2;
-        env.gain.setValueAtTime(0.04, now + 0.8);
-        env.gain.exponentialRampToValueAtTime(0.001, now + 3);
-        osc.connect(env); env.connect(masterGain);
-        osc.start(now + 0.8); osc.stop(now + 3.5);
-      }
-
-      chordTimer = setTimeout(playChord, 7000 + Math.random() * 3000);
-    }
-
-    playChord();
-  }
-
-  function stopMusic() {
-    clearTimeout(chordTimer); chordTimer = null;
-    musicNodes.forEach(n => { try { n.osc ? n.osc.stop() : n.stop(); } catch(e) {} });
-    musicNodes = [];
-    if (audioCtx) { audioCtx.close(); audioCtx = null; }
+  function createSpotifyWidget() {
+    const el = document.createElement('div');
+    el.id = 'spotify-widget';
+    el.style.cssText = `
+      position:fixed; bottom:60px; right:16px; z-index:9999;
+      width:300px; border-radius:12px; overflow:hidden;
+      box-shadow:0 8px 32px rgba(0,0,0,0.8);
+      border:1px solid rgba(201,168,76,0.2);
+    `;
+    el.innerHTML = `
+      <iframe
+        src="https://open.spotify.com/embed/playlist/${SPOTIFY_PLAYLIST_ID}?utm_source=generator&theme=0"
+        width="300" height="152" frameborder="0"
+        allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
+        loading="lazy">
+      </iframe>
+    `;
+    document.body.appendChild(el);
+    return el;
   }
 
   document.getElementById('btn-music-toggle').addEventListener('click', () => {
     const btn = document.getElementById('btn-music-toggle');
-    musicOn = !musicOn;
-    if (musicOn) { startMusic(); btn.textContent = '🔊'; btn.title = 'Mute ambient music'; }
-    else { stopMusic(); btn.textContent = '🔇'; btn.title = 'Play ambient music'; }
+    spotifyOpen = !spotifyOpen;
+    if (spotifyOpen) {
+      if (!spotifyEl) spotifyEl = createSpotifyWidget();
+      spotifyEl.style.display = '';
+      btn.textContent = '🎵';
+      btn.title = 'Hide Spotify player';
+    } else {
+      if (spotifyEl) spotifyEl.style.display = 'none';
+      btn.textContent = '🔇';
+      btn.title = 'Show Spotify player';
+    }
   });
 
   // ── Companion chat ──
@@ -1263,12 +1200,20 @@ function renderDirectionButtons(container, append) {
   const currentRoom = dungeon && dungeon.current_room_id ? dungeon.rooms[dungeon.current_room_id] : null;
   const exits = currentRoom ? (currentRoom.exits || {}) : {};
 
-  const dirs = [
-    { key: 'north', icon: '↑', label: 'N' },
-    { key: 'south', icon: '↓', label: 'S' },
-    { key: 'west',  icon: '←', label: 'W' },
-    { key: 'east',  icon: '→', label: 'E' },
-  ];
+  // Detect POI mode (forward/back exits) vs classic mode (cardinal)
+  const isPOI = 'forward' in exits || 'back' in exits;
+
+  const dirs = isPOI
+    ? [
+        { key: 'back',    icon: '←', label: 'Back'    },
+        { key: 'forward', icon: '→', label: 'Forward'  },
+      ]
+    : [
+        { key: 'north', icon: '↑', label: 'N' },
+        { key: 'south', icon: '↓', label: 'S' },
+        { key: 'west',  icon: '←', label: 'W' },
+        { key: 'east',  icon: '→', label: 'E' },
+      ];
 
   const group = append ? document.createElement('div') : container;
   if (append) {
@@ -1279,8 +1224,8 @@ function renderDirectionButtons(container, append) {
   dirs.forEach(d => {
     const btn = document.createElement('button');
     btn.className = 'dir-btn';
-    btn.title = d.key.charAt(0).toUpperCase() + d.key.slice(1);
-    btn.innerHTML = d.icon;
+    btn.title = d.label;
+    btn.innerHTML = `${d.icon} <span style="font-size:10px">${d.label}</span>`;
     btn.disabled = !exits[d.key];
     btn.addEventListener('click', () => ws.send('MOVE', { direction: d.key }));
     group.appendChild(btn);
@@ -2039,6 +1984,16 @@ function setupHandlers() {
     const payload = msg.payload || {};
     const text = payload.narrative || payload.response || payload.text || '';
     if (text) addLog(text, 'narrative');
+
+    // After DM responds, refresh contextual actions so buttons aren't stale
+    const phase = state.phase || 'exploring';
+    if (phase === 'exploring') {
+      const curRoom = state.dungeon && state.dungeon.rooms && state.dungeon.rooms[state.dungeon.current_room_id];
+      if (curRoom) {
+        // Re-render direction buttons (restores movement) + fresh contextual actions
+        renderActionBar();
+      }
+    }
   });
 
   // Game events (world events, broadcasts)
