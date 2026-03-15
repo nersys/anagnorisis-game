@@ -1119,6 +1119,7 @@ function initGame() {
   }
   document.getElementById('btn-dm-options').addEventListener('click', openDMOptions);
   document.getElementById('btn-dm-options-right').addEventListener('click', openDMOptions);
+  document.getElementById('btn-dm-options-banner').addEventListener('click', openDMOptions);
   document.getElementById('btn-close-dm-options').addEventListener('click', closeDMOptions);
   document.getElementById('dm-options-modal').addEventListener('click', e => {
     if (e.target === document.getElementById('dm-options-modal')) closeDMOptions();
