@@ -227,6 +227,7 @@
             <div class="scene-room-name" id="scene-room-name"></div>
             <div class="scene-action-btns">
               <button class="btn btn-ghost btn-sm scene-regen-btn" id="btn-narrator" title="Narrator ON — click to mute" style="font-size:16px">🔊</button>
+              <button class="btn btn-ghost btn-sm scene-regen-btn" id="btn-dm-options" title="DM Options">🎭</button>
               <button class="btn btn-ghost btn-sm scene-regen-btn" id="btn-regen-image" title="Regenerate scene art">🎨</button>
               <button class="btn btn-ghost btn-sm scene-regen-btn" id="btn-location-history" title="Location history">📜</button>
               <button class="btn btn-ghost btn-sm scene-regen-btn" id="btn-find-taverns" title="Find nearby taverns">🍺</button>
@@ -381,6 +382,68 @@
           </div>
 
           <div id="tavern-action-status" class="tavern-action-status hidden"></div>
+        </div>
+      </div>
+
+      <!-- DM Options Modal -->
+      <div class="modal-overlay hidden" id="dm-options-modal">
+        <div class="modal card" style="max-width:420px;width:95%">
+          <div class="modal-header">
+            <div>
+              <h2>🎭 Dungeon Master Options</h2>
+              <p style="font-size:10px;color:var(--text-muted);margin-top:2px;font-family:var(--font-mono)">Shape your narrator's soul</p>
+            </div>
+            <button class="modal-close" id="btn-close-dm-options">✕</button>
+          </div>
+
+          <div class="modal-body" style="display:flex;flex-direction:column;gap:16px;padding:16px">
+
+            <!-- Enable / Disable -->
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+              <div>
+                <div style="font-weight:600;font-size:13px">Dungeon Master</div>
+                <div style="font-size:11px;color:var(--text-muted)">Disable to free-play without AI narration</div>
+              </div>
+              <label class="dm-toggle-wrap" title="Toggle DM on/off">
+                <input type="checkbox" id="dm-enabled-checkbox" checked />
+                <span class="dm-toggle-slider"></span>
+              </label>
+            </div>
+
+            <hr class="divider" />
+
+            <!-- Personality presets -->
+            <div>
+              <div style="font-weight:600;font-size:13px;margin-bottom:8px">Personality</div>
+              <div class="dm-personality-grid" id="dm-personality-grid">
+                <button class="dm-personality-btn active" data-p="balanced">⚖️ Balanced</button>
+                <button class="dm-personality-btn" data-p="grim">💀 Grim</button>
+                <button class="dm-personality-btn" data-p="whimsical">🎪 Whimsical</button>
+                <button class="dm-personality-btn" data-p="brutal">⚔️ Brutal</button>
+              </div>
+            </div>
+
+            <!-- Custom personality notes -->
+            <div>
+              <div style="font-weight:600;font-size:13px;margin-bottom:6px">Custom Style Notes</div>
+              <textarea id="dm-personality-notes" rows="3"
+                placeholder="e.g. Speak like a Shakespearean villain. Reference Norse mythology. Favor intrigue over violence."
+                style="width:100%;box-sizing:border-box;background:var(--bg-secondary);color:var(--text-primary);border:1px solid var(--border);border-radius:6px;padding:8px;font-size:12px;resize:vertical;font-family:var(--font-mono)"></textarea>
+            </div>
+
+            <hr class="divider" />
+
+            <!-- Memory -->
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+              <div>
+                <div style="font-weight:600;font-size:13px">Story Memory</div>
+                <div style="font-size:11px;color:var(--text-muted)"><span id="dm-memory-count">0</span> turns in context</div>
+              </div>
+              <button class="btn btn-ghost btn-sm" id="btn-clear-dm-memory" style="color:var(--danger,#e74c3c);border-color:rgba(231,76,60,0.4)">🗑 Clear</button>
+            </div>
+
+            <button class="btn btn-primary full-width" id="btn-dm-options-apply">Apply Changes</button>
+          </div>
         </div>
       </div>
 

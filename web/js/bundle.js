@@ -582,6 +582,9 @@ let sceneImageSeed = 1;
 let _gpsReady = false;
 let narratorEnabled = true;    // narrator is ON by default; user toggles with 🔊/🔇
 let _narratorVoice = null;     // cached preferred voice
+let dmEnabled = true;          // DM on/off — toggled in DM Options panel
+let dmPersonality = 'balanced';// current DM personality preset
+let dmMemoryTurns = 0;         // last known turn count from server
 
 // ═══════════════════════════════════════════════════════
 // NARRATOR (Web Speech API TTS)
@@ -1026,6 +1029,65 @@ function initGame() {
       if (_narratorAudio) { _narratorAudio.pause(); _narratorAudio = null; }
       if ('speechSynthesis' in window) speechSynthesis.cancel();
     }
+  });
+
+  // ── DM Options modal ──
+  function openDMOptions() {
+    document.getElementById('dm-options-modal').classList.remove('hidden');
+    // Sync checkbox to current state
+    document.getElementById('dm-enabled-checkbox').checked = dmEnabled;
+    // Sync personality buttons
+    document.querySelectorAll('.dm-personality-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.p === dmPersonality);
+    });
+    // Update memory turn counter (approximate from WS state if available)
+    document.getElementById('dm-memory-count').textContent = dmMemoryTurns;
+  }
+  function closeDMOptions() {
+    document.getElementById('dm-options-modal').classList.add('hidden');
+  }
+  document.getElementById('btn-dm-options').addEventListener('click', openDMOptions);
+  document.getElementById('btn-close-dm-options').addEventListener('click', closeDMOptions);
+  document.getElementById('dm-options-modal').addEventListener('click', e => {
+    if (e.target === document.getElementById('dm-options-modal')) closeDMOptions();
+  });
+
+  // Personality preset buttons
+  document.getElementById('dm-personality-grid').addEventListener('click', e => {
+    const btn = e.target.closest('.dm-personality-btn');
+    if (!btn) return;
+    document.querySelectorAll('.dm-personality-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    dmPersonality = btn.dataset.p;
+  });
+
+  // DM enable/disable checkbox
+  document.getElementById('dm-enabled-checkbox').addEventListener('change', e => {
+    dmEnabled = e.target.checked;
+    const optBtn = document.getElementById('btn-dm-options');
+    optBtn.style.opacity = dmEnabled ? '' : '0.45';
+    optBtn.title = dmEnabled ? 'DM Options' : 'DM disabled — click to configure';
+  });
+
+  // Clear memory button
+  document.getElementById('btn-clear-dm-memory').addEventListener('click', () => {
+    ws.send('DM_CONFIG', { clear_memory: true });
+    dmMemoryTurns = 0;
+    document.getElementById('dm-memory-count').textContent = '0';
+    addLog('📜 Story memory cleared. The DM begins fresh.', 'system');
+  });
+
+  // Apply button — send full config to server
+  document.getElementById('btn-dm-options-apply').addEventListener('click', () => {
+    const notes = document.getElementById('dm-personality-notes').value.trim();
+    ws.send('DM_CONFIG', {
+      enabled: dmEnabled,
+      personality: dmPersonality,
+      personality_notes: notes,
+    });
+    closeDMOptions();
+    const label = { balanced:'⚖️ Balanced', grim:'💀 Grim', whimsical:'🎪 Whimsical', brutal:'⚔️ Brutal' }[dmPersonality] || dmPersonality;
+    addLog(`🎭 DM updated — ${dmEnabled ? label : 'Resting'}${notes ? ' · custom style active' : ''}`, 'system');
   });
 
   // ── Map expand ──
@@ -2200,6 +2262,9 @@ function setupHandlers() {
       addLog(text, 'narrative');
       narratorSpeak(text);
       lastNarrativeHint = text;
+      // Track memory turns for DM options panel
+      dmMemoryTurns++;
+      document.getElementById('dm-memory-count') && (document.getElementById('dm-memory-count').textContent = dmMemoryTurns);
       // Refresh scene image to reflect new story moment
       if (currentRoomData) generateSceneImage(currentRoomData, text);
     }
