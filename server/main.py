@@ -166,72 +166,15 @@ async def generate_scene_art(
             )
             image_url = resp.data[0].url
             logger.info(f"🎨 DALL-E 3 image generated for: {prompt[:50]}")
-            return RedirectResponse(url=image_url, status_code=302)
+            # Return JSON with URL so client can use it directly (avoids CORS/redirect issues)
+            from fastapi.responses import JSONResponse
+            return JSONResponse({"url": image_url, "source": "dalle3"})
         except Exception as e:
             logger.warning(f"DALL-E 3 failed ({e}), falling back to Claude SVG")
 
-    svg_system = (
-        "You are a dark fantasy SVG illustrator. "
-        "Generate atmospheric SVG artwork (800x350 viewBox) for RPG game scenes. "
-        "Use dark color palettes, gradients, silhouettes, and atmospheric effects. "
-        "Output ONLY valid SVG code — no markdown, no explanation, just the SVG tag."
-    )
-
-    svg_prompt = (
-        f"Create a dark fantasy SVG scene illustration (800x350) for: {prompt}\n\n"
-        "Requirements:\n"
-        "- Dark atmospheric background with gradient sky/environment\n"
-        "- Silhouetted foreground elements (buildings, trees, rocks, ruins)\n"
-        "- A dramatic light source (moon, torch, magic, fire)\n"
-        "- 2-3 enemy/creature silhouettes if enemies are mentioned\n"
-        "- Atmospheric effects (fog, stars, smoke, sparks)\n"
-        "- Location name as styled text at bottom-left\n"
-        "- Color scheme: deep purples, dark blues, amber/gold highlights\n"
-        "Start with <svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 800 350'>"
-    )
-
-    try:
-        ai_client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
-        response = ai_client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=4096,
-            system=svg_system,
-            messages=[{"role": "user", "content": svg_prompt}],
-        )
-        svg_text = response.content[0].text.strip()
-
-        # Ensure it's clean SVG
-        if not svg_text.startswith("<svg"):
-            start = svg_text.find("<svg")
-            if start != -1:
-                svg_text = svg_text[start:]
-            else:
-                raise ValueError("No SVG found in response")
-
-        logger.info(f"🎨 SVG scene generated ({len(svg_text)} chars)")
-        return Response(
-            content=svg_text,
-            media_type="image/svg+xml",
-            headers={"Cache-Control": "public, max-age=600"},
-        )
-
-    except Exception as e:
-        logger.error(f"SVG generation failed: {e}")
-        # Fallback: return a minimal atmospheric SVG
-        room_type = "dungeon"
-        fallback_svg = f"""<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 800 350'>
-  <defs>
-    <radialGradient id='g' cx='50%' cy='40%' r='60%'>
-      <stop offset='0%' stop-color='#2a1a4a'/>
-      <stop offset='100%' stop-color='#080810'/>
-    </radialGradient>
-  </defs>
-  <rect width='800' height='350' fill='url(#g)'/>
-  <circle cx='400' cy='80' r='30' fill='#c9a84c' opacity='0.3'/>
-  <circle cx='400' cy='80' r='15' fill='#f0cc6a' opacity='0.6'/>
-  <text x='20' y='330' font-family='serif' font-size='16' fill='#c9a84c' opacity='0.7'>{prompt[:60]}</text>
-</svg>"""
-        return Response(content=fallback_svg, media_type="image/svg+xml")
+    # No OPENAI_API_KEY — client will use Pollinations.ai instead
+    from fastapi.responses import JSONResponse
+    return JSONResponse({"error": "no_dalle_key"}, status_code=404)
 
 
 @app.get("/location-history")
@@ -409,6 +352,76 @@ out center 40;
         "player": {"lat": lat, "lng": lng},
         "count": len(pois),
     }
+
+
+@app.post("/contextual-actions")
+async def contextual_actions(
+    room_name: str = Body("Unknown Room", embed=True),
+    room_type: str = Body("corridor", embed=True),
+    room_description: str = Body("", embed=True),
+    player_class: str = Body("warrior", embed=True),
+    player_name: str = Body("Hero", embed=True),
+    enemies: list[str] = Body([], embed=True),
+    location_name: str = Body("", embed=True),
+    nearby_pois: list[str] = Body([], embed=True),
+):
+    """
+    Generate 4–6 contextual action buttons for the current room using Claude.
+    Returns a list of { label, action, icon } objects.
+    """
+    enemy_line = f"Enemies present: {', '.join(enemies)}." if enemies else "The room is peaceful."
+    poi_line = f"Nearby real-world places: {', '.join(nearby_pois[:4])}." if nearby_pois else ""
+    loc_line = f"Real-world location: {location_name}." if location_name else ""
+
+    prompt = f"""You are a dungeon master generating interactive action choices for a player.
+
+Room: "{room_name}" (type: {room_type})
+Description: {room_description or "A dark dungeon room."}
+Player: {player_name}, a {player_class}
+{enemy_line}
+{loc_line}
+{poi_line}
+
+Generate exactly 5 short, creative action choices this player can take right now.
+Make them specific to this location and situation — reference the real place name if given.
+Mix exploration, social, and clever actions (not just attack).
+Format as JSON array of objects with keys: "label" (short, max 4 words), "action" (verb phrase for the DM), "icon" (single emoji).
+
+Example format:
+[
+  {{"label": "Search the shadows", "action": "searches the room's dark corners for secrets", "icon": "🔍"}},
+  {{"label": "Listen at the door", "action": "presses their ear against the door to listen", "icon": "👂"}}
+]
+
+Output ONLY the JSON array, no explanation."""
+
+    try:
+        ai_client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+        response = ai_client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=500,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        text = response.content[0].text.strip()
+        # Parse JSON
+        import json
+        start = text.find('[')
+        end = text.rfind(']') + 1
+        if start != -1 and end > start:
+            actions = json.loads(text[start:end])
+            return {"actions": actions[:6]}
+    except Exception as e:
+        logger.error(f"Contextual actions failed: {e}")
+
+    # Fallback generic actions
+    fallback = [
+        {"label": "Search the room", "action": "searches the room carefully", "icon": "🔍"},
+        {"label": "Listen for sounds", "action": "listens quietly for any sounds", "icon": "👂"},
+        {"label": "Inspect the walls", "action": "examines the walls for hidden passages", "icon": "🧱"},
+        {"label": "Check your gear", "action": "inspects and adjusts their equipment", "icon": "🎒"},
+        {"label": "Rest briefly", "action": "takes a moment to catch their breath", "icon": "💤"},
+    ]
+    return {"actions": fallback}
 
 
 @app.post("/companion-chat")

@@ -873,14 +873,37 @@ function leaveParty() {
   ws.send('LEAVE_PARTY', {});
 }
 
-function startAdventure() {
+async function startAdventure() {
   const name = document.getElementById('input-adventure-name').value.trim() || 'Into the Depths';
-  ws.send('START_ADVENTURE', {
+  const pos = getPosition();
+
+  // Build payload — fetch nearby POIs if we have a position
+  const payload = {
     adventure_name: name,
     description: 'A perilous dungeon adventure',
     mode: selectedMode,
     difficulty: selectedDifficulty,
-  });
+  };
+
+  if (pos) {
+    payload.lat = pos.lat;
+    payload.lng = pos.lng;
+
+    // Get location name for the DM intro
+    const locStatus = document.getElementById('location-status');
+    payload.location_name = locStatus ? locStatus.textContent : `${pos.lat.toFixed(3)},${pos.lng.toFixed(3)}`;
+
+    // Fetch nearby POIs to seed the dungeon and the narrative
+    try {
+      const r = await fetch(`/nearby-rooms?lat=${pos.lat}&lng=${pos.lng}&radius=800`);
+      if (r.ok) {
+        const data = await r.json();
+        payload.pois = (data.pois || []).slice(0, 12);
+      }
+    } catch(e) { /* proceed without POIs */ }
+  }
+
+  ws.send('START_ADVENTURE', payload);
 }
 
 function lobbyToast(msg) {
@@ -945,43 +968,96 @@ function initGame() {
   let audioCtx = null;
   let musicNodes = [];
   let musicOn = false;
+  let chordTimer = null;
+
+  // Pentatonic minor scale in Hz (A2 root): A2 C3 D3 E3 G3 A3 C4 D4 E4 G4
+  const SCALE = [110, 130.8, 146.8, 164.8, 196, 220, 261.6, 293.7, 329.6, 392];
+  // Chord shapes as scale indices
+  const CHORDS = [[0,2,4,7],[0,3,5,8],[2,4,6,9],[1,3,5,7]];
+
+  function makeOsc(ctx, freq, type, gain, dest) {
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    osc.type = type;
+    osc.frequency.value = freq;
+    g.gain.value = gain;
+    osc.connect(g); g.connect(dest);
+    osc.start();
+    return { osc, gain: g };
+  }
 
   function startMusic() {
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    // Low drone
-    const drone = audioCtx.createOscillator();
-    const droneGain = audioCtx.createGain();
-    drone.type = 'sine';
-    drone.frequency.value = 55;
-    droneGain.gain.value = 0.08;
-    drone.connect(droneGain);
-    droneGain.connect(audioCtx.destination);
-    drone.start();
+    const masterGain = audioCtx.createGain();
+    masterGain.gain.value = 0.4;
 
-    // Mid shimmer
-    const shimmer = audioCtx.createOscillator();
-    const shimGain = audioCtx.createGain();
-    shimmer.type = 'sine';
-    shimmer.frequency.value = 110.5;
-    shimGain.gain.value = 0.04;
-    shimmer.connect(shimGain);
-    shimGain.connect(audioCtx.destination);
-    shimmer.start();
+    // Reverb via ConvolverNode (impulse response simulation)
+    const convolver = audioCtx.createConvolver();
+    const irLen = audioCtx.sampleRate * 2.5;
+    const irBuf = audioCtx.createBuffer(2, irLen, audioCtx.sampleRate);
+    for (let ch = 0; ch < 2; ch++) {
+      const d = irBuf.getChannelData(ch);
+      for (let i = 0; i < irLen; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / irLen, 2.5);
+    }
+    convolver.buffer = irBuf;
+    const reverbGain = audioCtx.createGain(); reverbGain.gain.value = 0.35;
+    masterGain.connect(convolver); convolver.connect(reverbGain); reverbGain.connect(audioCtx.destination);
+    masterGain.connect(audioCtx.destination);
 
-    // Slow LFO on shimmer pitch for eerie wavering
-    const lfo = audioCtx.createOscillator();
-    const lfoGain = audioCtx.createGain();
-    lfo.frequency.value = 0.15;
-    lfoGain.gain.value = 3;
-    lfo.connect(lfoGain);
-    lfoGain.connect(shimmer.frequency);
-    lfo.start();
+    // Drone: deep sub bass
+    const { osc: bass } = makeOsc(audioCtx, SCALE[0] / 2, 'sine', 0.18, masterGain);
 
-    musicNodes = [drone, shimmer, lfo];
+    // Slow LFO breathing on master volume
+    const breathLfo = audioCtx.createOscillator();
+    const breathGain = audioCtx.createGain(); breathGain.gain.value = 0.06;
+    breathLfo.frequency.value = 0.08; breathLfo.connect(breathGain); breathGain.connect(masterGain.gain);
+    breathLfo.start();
+
+    musicNodes = [bass, breathLfo];
+    let chordIdx = 0;
+
+    function playChord() {
+      if (!audioCtx) return;
+      const now = audioCtx.currentTime;
+      const chord = CHORDS[chordIdx % CHORDS.length];
+      chordIdx++;
+
+      chord.forEach((si, i) => {
+        const freq = SCALE[si % SCALE.length];
+        const osc = audioCtx.createOscillator();
+        const env = audioCtx.createGain();
+        osc.type = i === 0 ? 'triangle' : 'sine';
+        osc.frequency.value = freq;
+        // Slight detune for warmth
+        osc.detune.value = (Math.random() - 0.5) * 8;
+        env.gain.setValueAtTime(0, now);
+        env.gain.linearRampToValueAtTime(0.07 / (i + 1), now + 0.3);
+        env.gain.setTargetAtTime(0, now + 4.5, 1.5);
+        osc.connect(env); env.connect(masterGain);
+        osc.start(now); osc.stop(now + 8);
+      });
+
+      // Occasional plucked high note
+      if (Math.random() < 0.4) {
+        const hi = SCALE[4 + Math.floor(Math.random() * 5)];
+        const osc = audioCtx.createOscillator();
+        const env = audioCtx.createGain();
+        osc.type = 'triangle'; osc.frequency.value = hi * 2;
+        env.gain.setValueAtTime(0.04, now + 0.8);
+        env.gain.exponentialRampToValueAtTime(0.001, now + 3);
+        osc.connect(env); env.connect(masterGain);
+        osc.start(now + 0.8); osc.stop(now + 3.5);
+      }
+
+      chordTimer = setTimeout(playChord, 7000 + Math.random() * 3000);
+    }
+
+    playChord();
   }
 
   function stopMusic() {
-    musicNodes.forEach(n => { try { n.stop(); } catch(e) {} });
+    clearTimeout(chordTimer); chordTimer = null;
+    musicNodes.forEach(n => { try { n.osc ? n.osc.stop() : n.stop(); } catch(e) {} });
     musicNodes = [];
     if (audioCtx) { audioCtx.close(); audioCtx = null; }
   }
@@ -1167,9 +1243,19 @@ function renderActionBar() {
     return;
   }
 
-  // Exploring (default)
-  bar.innerHTML = `<div class="action-group" id="dir-group"></div>`;
+  // Exploring (default) — direction buttons + contextual actions
+  bar.innerHTML = `
+    <div class="action-group" id="dir-group"></div>
+    <div class="action-divider"></div>
+    <div class="action-group contextual-actions" id="contextual-actions-group">
+      <span style="color:var(--text-dim);font-size:11px;align-self:center">✨ Loading actions…</span>
+    </div>
+  `;
   renderDirectionButtons(document.getElementById('dir-group'), false);
+
+  // Load contextual actions for current room
+  const curRoom = state.dungeon && state.dungeon.rooms && state.dungeon.rooms[state.dungeon.current_room_id];
+  if (curRoom) loadContextualActions(curRoom);
 }
 
 function renderDirectionButtons(container, append) {
@@ -1268,6 +1354,79 @@ function updateMapProgress() {
   document.getElementById('map-progress').textContent = `${cleared}/${rooms.length}`;
 }
 
+// ═══════════════════════════════════════════════════════
+// CONTEXTUAL ACTIONS (Claude-generated per room)
+// ═══════════════════════════════════════════════════════
+
+let _contextualActionRoom = null;
+
+async function loadContextualActions(room) {
+  if (!room) return;
+  _contextualActionRoom = room.id;
+
+  const pos = getPosition();
+  const nearby = [];
+  if (state.dungeon && state.dungeon.rooms) {
+    Object.values(state.dungeon.rooms).forEach(r => {
+      if (r.id !== room.id && r.name) nearby.push(r.name);
+    });
+  }
+
+  try {
+    const body = {
+      room_name: room.name || 'Unknown Room',
+      room_type: room.room_type || 'corridor',
+      room_description: room.description || '',
+      player_class: state.player?.player_class || 'warrior',
+      player_name: state.player?.name || 'Hero',
+      enemies: (room.enemies || []).map(e => e.name || e),
+      location_name: pos ? `${pos.lat.toFixed(3)},${pos.lng.toFixed(3)}` : '',
+      nearby_pois: nearby.slice(0, 5),
+    };
+
+    const r = await fetch('/contextual-actions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) throw new Error('fetch failed');
+    const data = await r.json();
+
+    // Only render if we're still in the same room
+    if (_contextualActionRoom !== room.id) return;
+    renderContextualActions(data.actions || []);
+  } catch(e) {
+    if (_contextualActionRoom === room.id) {
+      renderContextualActions([
+        { label: 'Search the area', action: 'searches the area carefully', icon: '🔍' },
+        { label: 'Listen quietly', action: 'listens for sounds', icon: '👂' },
+        { label: 'Check your gear', action: 'checks their gear', icon: '🎒' },
+      ]);
+    }
+  }
+}
+
+function renderContextualActions(actions) {
+  const container = document.getElementById('contextual-actions-group');
+  if (!container) return;
+
+  container.innerHTML = '';
+  actions.forEach(a => {
+    const btn = document.createElement('button');
+    btn.className = 'btn btn-ghost btn-sm contextual-action-btn';
+    btn.innerHTML = `${a.icon || '✨'} ${a.label}`;
+    btn.title = a.action || a.label;
+    btn.addEventListener('click', () => {
+      // Send the action as a free-form player action
+      ws.send('PLAYER_ACTION', { action: a.action, label: a.label });
+      addLog(`You ${a.action}.`, 'narrative');
+      btn.disabled = true;
+      btn.style.opacity = '0.5';
+    });
+    container.appendChild(btn);
+  });
+}
+
 function returnToLobby() {
   state.dungeon = null;
   state.combat = null;
@@ -1323,55 +1482,67 @@ function generateSceneImage(room) {
 
   const realName = (laMap && laMap.getRoomName(room.id)) || room.name || '';
   nameEl.textContent = realName;
-  // Show gradient immediately — image overlays when ready
   wrapper.style.background = roomGradient(room.room_type);
   img.style.display = 'none';
   loading.style.display = 'flex';
 
-  const zoneName = (laMap && laMap.getZoneName()) || 'Los Angeles';
-  const roomDesc = room.description || room.name || 'dungeon room';
+  const pos = getPosition();
+  const locHint = pos ? `near lat ${pos.lat.toFixed(2)} lng ${pos.lng.toFixed(2)},` : '';
+  const zoneName = (laMap && laMap.getZoneName()) || '';
   const hasEnemies = room.enemies && room.enemies.length > 0;
   const enemyDesc = hasEnemies ? room.enemies.map(e => e.name).join(', ') : '';
 
-  let prompt = `dark fantasy RPG scene at ${realName} in ${zoneName}`;
-  if (room.room_type === 'boss') prompt += ', dramatic final boss chamber, ancient evil, purple ominous light';
-  else if (room.room_type === 'treasure') prompt += ', hidden treasure vault, gold and gemstones glowing';
-  else if (room.room_type === 'start') prompt += ', adventure starting point, torch-lit entrance';
-  else prompt += `, ${roomDesc}`;
-  if (hasEnemies) prompt += `, ${enemyDesc} creature lurking in shadows`;
-  prompt += ', cinematic, atmospheric lighting, concept art, oil painting, wide shot';
+  let prompt = `dark fantasy RPG, ${locHint} ${realName}`;
+  if (zoneName) prompt += ` in ${zoneName}`;
+  if (room.room_type === 'boss') prompt += ', final boss chamber, ancient evil, dramatic purple light';
+  else if (room.room_type === 'treasure') prompt += ', hidden treasure vault, gold and gems glowing';
+  else if (room.room_type === 'start') prompt += ', adventure entrance, torch-lit stone archway';
+  else prompt += `, ${room.description || room.name || 'dungeon corridor'}`;
+  if (hasEnemies) prompt += `, ${enemyDesc} lurking`;
+  prompt += ', cinematic wide shot, oil painting, atmospheric fog, concept art';
 
-  const encoded = encodeURIComponent(prompt);
-  const url = `/scene-art?prompt=${encoded}`;
+  const seed = sceneImageSeed;
 
   const showFallback = () => {
-    img.classList.remove('loading');
     loading.style.display = 'none';
     img.style.display = 'none';
-    document.getElementById('scene-wrapper').style.background = roomGradient(room.room_type);
+    wrapper.style.background = roomGradient(room.room_type);
   };
 
-  // Load image with 20s timeout
-  const tempImg = new Image();
-  const timeout = setTimeout(showFallback, 20000);
-  tempImg.onload = () => {
-    clearTimeout(timeout);
-    img.src = url;
-    img.style.display = '';
-    img.style.opacity = '0';
-    img.classList.remove('loading');
-    loading.style.display = 'none';
-    // Fade in over gradient
-    requestAnimationFrame(() => {
-      img.style.transition = 'opacity 0.8s ease';
-      img.style.opacity = '1';
+  function loadImageUrl(url) {
+    const tempImg = new Image();
+    const timeout = setTimeout(showFallback, 30000);
+    tempImg.onload = () => {
+      clearTimeout(timeout);
+      img.src = url;
+      img.style.display = '';
+      img.style.opacity = '0';
+      loading.style.display = 'none';
+      requestAnimationFrame(() => {
+        img.style.transition = 'opacity 1s ease';
+        img.style.opacity = '1';
+      });
+    };
+    tempImg.onerror = () => { clearTimeout(timeout); showFallback(); };
+    tempImg.src = url;
+  }
+
+  // Try DALL-E 3 via server first (works if OPENAI_API_KEY is set)
+  fetch(`/scene-art?prompt=${encodeURIComponent(prompt)}`)
+    .then(r => r.ok ? r.json().catch(() => null) : null)
+    .then(data => {
+      if (data && data.url) {
+        loadImageUrl(data.url);
+      } else {
+        // Fall back to Pollinations.ai (free, no key needed)
+        const polUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1200&height=400&seed=${seed}&nologo=true&enhance=true`;
+        loadImageUrl(polUrl);
+      }
+    })
+    .catch(() => {
+      const polUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1200&height=400&seed=${seed}&nologo=true&enhance=true`;
+      loadImageUrl(polUrl);
     });
-  };
-  tempImg.onerror = () => {
-    clearTimeout(timeout);
-    showFallback();
-  };
-  tempImg.src = url;
 }
 
 function roomGradient(type) {
@@ -1826,6 +1997,13 @@ function setupHandlers() {
   ws.on('COMBAT_UPDATE', msg => {
     const payload = msg.payload || {};
     applyStateUpdate(payload);
+
+    // Fled successfully — server moved us to prev room, update scene + actions
+    if (payload.phase === 'exploring' && payload.dungeon && payload.room) {
+      generateSceneImage(payload.room);
+      addLog('You catch your breath, having escaped...', 'system');
+      loadContextualActions(payload.room);
+    }
 
     if (state.screen === 'game') {
       renderStats();
