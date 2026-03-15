@@ -580,6 +580,57 @@ let selectedDifficulty = 'normal';
 let currentRoomData = null;
 let sceneImageSeed = 1;
 let _gpsReady = false;
+let narratorEnabled = false;   // narrator is OFF by default; user toggles with 🔇/🔊
+let _narratorVoice = null;     // cached preferred voice
+
+// ═══════════════════════════════════════════════════════
+// NARRATOR (Web Speech API TTS)
+// ═══════════════════════════════════════════════════════
+
+function _pickNarratorVoice() {
+  if (_narratorVoice) return _narratorVoice;
+  const voices = speechSynthesis.getVoices();
+  // Prefer deep dramatic English voices: UK English male, then any English male, then first available
+  const ranked = [
+    voices.find(v => /en-GB/i.test(v.lang) && /male/i.test(v.name)),
+    voices.find(v => /en/i.test(v.lang) && /male/i.test(v.name)),
+    voices.find(v => /en-GB/i.test(v.lang)),
+    voices.find(v => /en/i.test(v.lang)),
+    voices[0],
+  ];
+  _narratorVoice = ranked.find(Boolean) || null;
+  return _narratorVoice;
+}
+
+function narratorSpeak(text) {
+  if (!narratorEnabled || !('speechSynthesis' in window)) return;
+  // Strip markdown, dice tags, emoji, and excess whitespace
+  const clean = text
+    .replace(/\[\[ROLL:[^\]]+\]\]/g, '')
+    .replace(/[🎲✅❌💥💀⚀⚁⚂⚃⚄⚅🔊🔇🎨📜🍺⚔️🌟]/gu, '')
+    .replace(/\*{1,2}([^*]+)\*{1,2}/g, '$1')
+    .replace(/#+\s/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!clean) return;
+
+  speechSynthesis.cancel(); // Stop any current speech before starting new
+  const utter = new SpeechSynthesisUtterance(clean);
+  utter.rate = 0.88;      // Slightly slower = more dramatic
+  utter.pitch = 0.85;     // Slightly lower pitch = more gravitas
+  utter.volume = 1.0;
+
+  // Voices may not be loaded yet on first call
+  const voice = _pickNarratorVoice();
+  if (voice) utter.voice = voice;
+  else speechSynthesis.onvoiceschanged = () => {
+    _narratorVoice = null;
+    const v = _pickNarratorVoice();
+    if (v) utter.voice = v;
+  };
+
+  speechSynthesis.speak(utter);
+}
 
 // ═══════════════════════════════════════════════════════
 // SCREEN ROUTER
@@ -940,7 +991,16 @@ function initGame() {
   });
   document.getElementById('btn-regen-image').addEventListener('click', () => {
     sceneImageSeed = Math.floor(Math.random() * 99999);
-    generateSceneImage(currentRoomData);
+    generateSceneImage(currentRoomData, lastNarrativeHint);
+  });
+
+  // ── Narrator toggle ──
+  document.getElementById('btn-narrator').addEventListener('click', () => {
+    narratorEnabled = !narratorEnabled;
+    const btn = document.getElementById('btn-narrator');
+    btn.textContent = narratorEnabled ? '🔊' : '🔇';
+    btn.title = narratorEnabled ? 'Narrator ON — click to mute' : 'Narrator OFF — click to enable';
+    if (!narratorEnabled) speechSynthesis.cancel();
   });
 
   // ── Map expand ──
@@ -1512,7 +1572,10 @@ function addLog(text, kind = 'narrative') {
 // SCENE IMAGE GENERATION (DALL-E 3 via server)
 // ═══════════════════════════════════════════════════════
 
-function generateSceneImage(room) {
+// Track last narrative so DM_RESPONSE can trigger a scene refresh
+let lastNarrativeHint = '';
+
+function generateSceneImage(room, narrativeHint) {
   if (!room) return;
   currentRoomData = room;
 
@@ -1533,12 +1596,20 @@ function generateSceneImage(room) {
   const hasEnemies = room.enemies && room.enemies.length > 0;
   const enemyDesc = hasEnemies ? room.enemies.map(e => e.name).join(', ') : '';
 
-  let prompt = `dark fantasy RPG, ${locHint} ${realName}`;
-  if (zoneName) prompt += ` in ${zoneName}`;
+  // Use narrative hint to ground the image in what's actually happening in the story
+  const storyContext = narrativeHint
+    ? narrativeHint.replace(/[^\w\s,.'"-]/g, '').slice(0, 200)
+    : '';
+
+  let prompt = `dark fantasy RPG scene`;
+  if (zoneName) prompt += ` in ${zoneName}, Los Angeles`;
+  if (locHint) prompt += `, ${locHint}`;
+  prompt += `, ${realName}`;
+  if (storyContext) prompt += `. Scene: ${storyContext}`;
   if (room.room_type === 'boss') prompt += ', final boss chamber, ancient evil, dramatic purple light';
   else if (room.room_type === 'treasure') prompt += ', hidden treasure vault, gold and gems glowing';
   else if (room.room_type === 'start') prompt += ', adventure entrance, torch-lit stone archway';
-  else prompt += `, ${room.description || room.name || 'dungeon corridor'}`;
+  else if (!storyContext) prompt += `, ${room.description || room.name || 'dungeon corridor'}`;
   if (hasEnemies) prompt += `, ${enemyDesc} lurking`;
   prompt += ', cinematic wide shot, oil painting, atmospheric fog, concept art';
 
@@ -2081,7 +2152,13 @@ function setupHandlers() {
     const text = payload.narrative || payload.response || payload.text || '';
     // Show roll summary inline before narrative if present
     if (payload.roll_summary) addLog(payload.roll_summary, 'roll');
-    if (text) addLog(text, 'narrative');
+    if (text) {
+      addLog(text, 'narrative');
+      narratorSpeak(text);
+      lastNarrativeHint = text;
+      // Refresh scene image to reflect new story moment
+      if (currentRoomData) generateSceneImage(currentRoomData, text);
+    }
 
     // After DM responds, refresh contextual actions so buttons aren't stale
     const phase = state.phase || 'exploring';
