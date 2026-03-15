@@ -415,6 +415,102 @@ class LAMap {
   }
 }
 
+// ═══ gps.js ═══
+/**
+ * GPS Module — Real-world location tracking for Anagnorisis
+ */
+
+const PROXIMITY_THRESHOLD_M = 80;
+
+function haversineM(lat1, lng1, lat2, lng2) {
+  const R = 6_371_000;
+  const phi1 = lat1 * Math.PI / 180;
+  const phi2 = lat2 * Math.PI / 180;
+  const dphi = (lat2 - lat1) * Math.PI / 180;
+  const dlam = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dphi / 2) ** 2 + Math.cos(phi1) * Math.cos(phi2) * Math.sin(dlam / 2) ** 2;
+  return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+const _gpsState = {
+  position: null,
+  watchId: null,
+  manual: false,
+  simulating: false,
+  listeners: new Set(),
+};
+
+function startWatching() {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) { reject(new Error('Geolocation not supported')); return; }
+    const opts = { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 };
+    _gpsState.watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        const prev = _gpsState.position;
+        _gpsState.position = { lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy };
+        _gpsState.manual = false;
+        const moved = !prev || haversineM(prev.lat, prev.lng, _gpsState.position.lat, _gpsState.position.lng) > 5;
+        if (moved) _gpsEmit();
+        resolve(_gpsState.position);
+      },
+      (err) => reject(err),
+      opts,
+    );
+  });
+}
+
+function setManualPosition(latOrObj, lng) {
+  if (typeof latOrObj === 'string') {
+    const parts = latOrObj.split(',').map(Number);
+    _gpsState.position = { lat: parts[0], lng: parts[1], accuracy: 1000 };
+  } else if (typeof latOrObj === 'object') {
+    _gpsState.position = { lat: latOrObj.lat, lng: latOrObj.lng, accuracy: 1000 };
+  } else {
+    _gpsState.position = { lat: Number(latOrObj), lng: Number(lng), accuracy: 1000 };
+  }
+  _gpsState.manual = true;
+  _gpsState.simulating = false;
+  _gpsEmit();
+}
+
+function enableSimulateTravel() { _gpsState.simulating = true; _gpsEmit(); }
+function disableSimulateTravel() { _gpsState.simulating = false; _gpsEmit(); }
+function getPosition() { return _gpsState.position ? { ..._gpsState.position } : null; }
+function isManual() { return _gpsState.manual; }
+function isSimulating() { return _gpsState.simulating; }
+function isGPSActive() { return _gpsState.watchId !== null && !_gpsState.manual; }
+
+async function getIPGeolocation() {
+  try {
+    const r = await fetch('https://ipapi.co/json/', { cache: 'no-store' });
+    if (r.ok) { const d = await r.json(); if (d.latitude && d.longitude) return { lat: d.latitude, lng: d.longitude, city: d.city || d.region || '' }; }
+  } catch { /* fall through */ }
+  try {
+    const r = await fetch('https://ipinfo.io/json', { cache: 'no-store' });
+    if (r.ok) { const d = await r.json(); if (d.loc) { const [lat, lng] = d.loc.split(',').map(Number); return { lat, lng, city: d.city || '' }; } }
+  } catch { /* fall through */ }
+  return null;
+}
+
+function isNearby(targetLat, targetLng) {
+  if (_gpsState.simulating) return true;
+  if (!_gpsState.position) return true;
+  if (targetLat == null || targetLng == null) return true;
+  return haversineM(_gpsState.position.lat, _gpsState.position.lng, targetLat, targetLng) <= PROXIMITY_THRESHOLD_M;
+}
+
+function distanceTo(targetLat, targetLng) {
+  if (!_gpsState.position || targetLat == null || targetLng == null) return null;
+  return Math.round(haversineM(_gpsState.position.lat, _gpsState.position.lng, targetLat, targetLng));
+}
+
+function onGPSUpdate(fn) { _gpsState.listeners.add(fn); return () => _gpsState.listeners.delete(fn); }
+
+function _gpsEmit() {
+  const snap = { position: _gpsState.position ? { ..._gpsState.position } : null, manual: _gpsState.manual, simulating: _gpsState.simulating };
+  _gpsState.listeners.forEach(fn => fn(snap));
+}
+
 // ═══ app.js ═══
 /**
  * Anagnorisis — Main Web Application
@@ -480,8 +576,10 @@ const ws = new GameWebSocket();
 let laMap = null;
 let selectedClass = 'warrior';
 let selectedMode = 'guided';
+let selectedDifficulty = 'normal';
 let currentRoomData = null;
 let sceneImageSeed = 1;
+let _gpsReady = false;
 
 // ═══════════════════════════════════════════════════════
 // SCREEN ROUTER
@@ -663,9 +761,19 @@ function initLobby() {
     const btn = e.target.closest('.mode-btn');
     if (!btn) return;
     selectedMode = btn.dataset.mode;
-    document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('#mode-selector .mode-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
   });
+
+  document.getElementById('difficulty-selector').addEventListener('click', e => {
+    const btn = e.target.closest('.mode-btn');
+    if (!btn) return;
+    selectedDifficulty = btn.dataset.diff;
+    document.querySelectorAll('#difficulty-selector .mode-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  });
+
+  initLocationWidget();
 }
 
 function renderLobbyPlayer() {
@@ -771,6 +879,7 @@ function startAdventure() {
     adventure_name: name,
     description: 'A perilous dungeon adventure',
     mode: selectedMode,
+    difficulty: selectedDifficulty,
   });
 }
 
@@ -810,7 +919,14 @@ function initGame() {
     sceneImageSeed = Math.floor(Math.random() * 99999);
     generateSceneImage(currentRoomData);
   });
-  document.getElementById('btn-generate-art').addEventListener('click', generateCustomArt);
+
+  // ── Map expand ──
+  document.getElementById('btn-expand-map').addEventListener('click', () => {
+    const panel = document.getElementById('map-panel');
+    const expanded = panel.classList.toggle('map-panel--expanded');
+    document.getElementById('btn-expand-map').title = expanded ? 'Collapse map' : 'Expand map';
+    if (laMap && laMap.map) laMap.map.invalidateSize();
+  });
 
   // ── Theme toggle ──
   const themeBtn = document.getElementById('btn-theme-toggle');
@@ -823,6 +939,58 @@ function initGame() {
       delete document.documentElement.dataset.theme;
       themeBtn.textContent = '🌙';
     }
+  });
+
+  // ── Music toggle (ambient dungeon atmosphere via Web Audio) ──
+  let audioCtx = null;
+  let musicNodes = [];
+  let musicOn = false;
+
+  function startMusic() {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    // Low drone
+    const drone = audioCtx.createOscillator();
+    const droneGain = audioCtx.createGain();
+    drone.type = 'sine';
+    drone.frequency.value = 55;
+    droneGain.gain.value = 0.08;
+    drone.connect(droneGain);
+    droneGain.connect(audioCtx.destination);
+    drone.start();
+
+    // Mid shimmer
+    const shimmer = audioCtx.createOscillator();
+    const shimGain = audioCtx.createGain();
+    shimmer.type = 'sine';
+    shimmer.frequency.value = 110.5;
+    shimGain.gain.value = 0.04;
+    shimmer.connect(shimGain);
+    shimGain.connect(audioCtx.destination);
+    shimmer.start();
+
+    // Slow LFO on shimmer pitch for eerie wavering
+    const lfo = audioCtx.createOscillator();
+    const lfoGain = audioCtx.createGain();
+    lfo.frequency.value = 0.15;
+    lfoGain.gain.value = 3;
+    lfo.connect(lfoGain);
+    lfoGain.connect(shimmer.frequency);
+    lfo.start();
+
+    musicNodes = [drone, shimmer, lfo];
+  }
+
+  function stopMusic() {
+    musicNodes.forEach(n => { try { n.stop(); } catch(e) {} });
+    musicNodes = [];
+    if (audioCtx) { audioCtx.close(); audioCtx = null; }
+  }
+
+  document.getElementById('btn-music-toggle').addEventListener('click', () => {
+    const btn = document.getElementById('btn-music-toggle');
+    musicOn = !musicOn;
+    if (musicOn) { startMusic(); btn.textContent = '🔊'; btn.title = 'Mute ambient music'; }
+    else { stopMusic(); btn.textContent = '🔇'; btn.title = 'Play ambient music'; }
   });
 
   // ── Companion chat ──
@@ -1792,6 +1960,129 @@ function formatName(str) {
 }
 
 // ═══════════════════════════════════════════════════════
+// GPS INIT
+// ═══════════════════════════════════════════════════════
+
+function renderGPSIndicator() {
+  const el = document.getElementById('gps-indicator');
+  if (!el) return;
+  const pos = getPosition();
+  if (!pos) {
+    el.textContent = '📡 No location'; el.style.color = '#e53935';
+    el.title = 'No location set — will use classic dungeon';
+  } else if (isGPSActive()) {
+    el.textContent = `📍 GPS ±${Math.round(pos.accuracy)}m`; el.style.color = '#43a047';
+    el.title = `Live GPS: ${pos.lat.toFixed(5)}, ${pos.lng.toFixed(5)}`;
+  } else if (isSimulating()) {
+    el.textContent = `🌍 ${pos.lat.toFixed(3)}, ${pos.lng.toFixed(3)}`; el.style.color = '#4fc3f7';
+    el.title = 'Real-world dungeon active (desktop mode)';
+  } else {
+    el.textContent = `📍 ${pos.lat.toFixed(3)}, ${pos.lng.toFixed(3)}`; el.style.color = '#4fc3f7';
+    el.title = `Location set: ${pos.lat.toFixed(5)}, ${pos.lng.toFixed(5)}`;
+  }
+}
+
+async function initGPS() {
+  let gpsResolved = false;
+  startWatching().then(() => {
+    gpsResolved = true; _gpsReady = true;
+    renderGPSIndicator();
+    updateLocationWidget('📍 GPS active', 'GPS');
+    if (laMap) { const pos = getPosition(); if (pos) laMap.updatePlayerPosition(pos.lat, pos.lng); }
+  }).catch(() => {});
+
+  const ip = await getIPGeolocation();
+  if (ip && !gpsResolved) {
+    setManualPosition(ip.lat, ip.lng);
+    enableSimulateTravel();
+    _gpsReady = true;
+    renderGPSIndicator();
+    const label = ip.city ? `${ip.city} (${ip.lat.toFixed(3)}, ${ip.lng.toFixed(3)})` : `${ip.lat.toFixed(3)}, ${ip.lng.toFixed(3)}`;
+    updateLocationWidget(label, 'IP');
+    return;
+  }
+  if (!ip && !gpsResolved) {
+    _gpsReady = false;
+    renderGPSIndicator();
+    updateLocationWidget('Could not detect — enter your location below', '');
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// LOCATION WIDGET
+// ═══════════════════════════════════════════════════════
+
+async function geocodePlace(query) {
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1`;
+    const r = await fetch(url, { headers: { 'User-Agent': 'Anagnorisis-Game/1.0' } });
+    if (r.ok) {
+      const data = await r.json();
+      if (data.length > 0) {
+        return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon), city: data[0].display_name.split(',')[0] };
+      }
+    }
+  } catch(e) { /* ignore */ }
+  return null;
+}
+
+function updateLocationWidget(statusText, source) {
+  const statusEl = document.getElementById('location-status');
+  const sourceEl = document.getElementById('location-source');
+  if (statusEl) statusEl.textContent = statusText;
+  if (sourceEl) {
+    const labels = { GPS: '(live GPS)', IP: '(from IP — approximate)', manual: '(set manually)' };
+    sourceEl.textContent = labels[source] || '';
+  }
+}
+
+function initLocationWidget() {
+  const editPanel = document.getElementById('location-edit');
+  const changeBtn = document.getElementById('btn-change-location');
+  const setBtn    = document.getElementById('btn-location-set');
+  const cancelBtn = document.getElementById('btn-location-cancel');
+  const input     = document.getElementById('input-location-text');
+  if (!editPanel || !changeBtn) return;
+
+  changeBtn.addEventListener('click', () => {
+    editPanel.classList.remove('hidden');
+    input.focus();
+  });
+  cancelBtn.addEventListener('click', () => editPanel.classList.add('hidden'));
+
+  setBtn.addEventListener('click', async () => {
+    const raw = input.value.trim();
+    if (!raw) return;
+    setBtn.textContent = '…';
+    setBtn.disabled = true;
+
+    const parts = raw.split(',').map(s => parseFloat(s.trim()));
+    if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+      setManualPosition(parts[0], parts[1]);
+      enableSimulateTravel();
+      updateLocationWidget(`${parts[0].toFixed(4)}, ${parts[1].toFixed(4)}`, 'manual');
+      editPanel.classList.add('hidden');
+    } else {
+      const result = await geocodePlace(raw);
+      if (result) {
+        setManualPosition(result.lat, result.lng);
+        enableSimulateTravel();
+        updateLocationWidget(`${result.city || raw} (${result.lat.toFixed(3)}, ${result.lng.toFixed(3)})`, 'manual');
+        editPanel.classList.add('hidden');
+      } else {
+        updateLocationWidget(`❌ Could not find "${raw}" — try lat,lng format`, '');
+      }
+    }
+
+    setBtn.textContent = 'Set';
+    setBtn.disabled = false;
+    input.value = '';
+  });
+
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') setBtn.click(); });
+}
+
+// ═══════════════════════════════════════════════════════
 // BOOT
 // ═══════════════════════════════════════════════════════
 
@@ -1801,6 +2092,7 @@ function boot() {
   initLobby();
   initGame();
   showScreen('login');
+  initGPS();
 }
 
 // Script is at bottom of <body> — DOM already parsed, call directly

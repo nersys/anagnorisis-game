@@ -141,6 +141,14 @@
                     <button class="mode-btn" data-mode="structured">📜 Structured</button>
                   </div>
                 </div>
+                <div class="form-group">
+                  <label class="form-label">Difficulty</label>
+                  <div class="mode-selector" id="difficulty-selector">
+                    <button class="mode-btn" data-diff="easy">🕊 Easy</button>
+                    <button class="mode-btn active" data-diff="normal">⚔ Normal</button>
+                    <button class="mode-btn" data-diff="hard">💀 Hard</button>
+                  </div>
+                </div>
                 <button id="btn-start-adventure" class="btn btn-primary btn-large">
                   <span>Begin Adventure</span> <span>🐉</span>
                 </button>
@@ -201,6 +209,7 @@
             <div style="display:flex;align-items:center;gap:10px">
               <span id="gps-indicator" style="font-size:11px;font-family:'Roboto Mono',monospace;cursor:default" title="GPS status">📡 No GPS</span>
               <span id="game-time" class="game-time">Day 1 · 06:00</span>
+              <button id="btn-music-toggle" class="btn btn-ghost btn-sm btn-icon-only" title="Toggle ambient music" style="width:30px;height:30px;font-size:14px;padding:0">🔇</button>
               <button id="btn-theme-toggle" class="btn btn-ghost btn-sm btn-icon-only" title="Toggle light/dark mode" style="width:30px;height:30px;font-size:14px;padding:0">🌙</button>
             </div>
           </div>
@@ -273,17 +282,6 @@
             </div>
           </div>
 
-          <!-- Art Generator Panel -->
-          <div class="panel art-panel">
-            <div class="panel-header"><span>🎨 Scene Painter</span></div>
-            <div class="art-form">
-              <textarea id="art-prompt" class="form-input art-textarea" placeholder="Describe what you want to see..."></textarea>
-              <button id="btn-generate-art" class="btn btn-accent btn-sm full-width">✨ Generate Art</button>
-            </div>
-            <div class="art-gallery" id="art-gallery">
-              <!-- Generated images appear here -->
-            </div>
-          </div>
         </div>
 
       </div><!-- end game-layout -->
@@ -389,6 +387,6 @@
   </div><!-- end #app -->
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="/static/js/bundle.js?v=7"></script>
+  <script src="/static/js/bundle.js?v=8"></script>
 </body>
 </html>
