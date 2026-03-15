@@ -86,24 +86,41 @@ class AIDungeonMaster:
             )
         return "\n".join(lines)
     
-    async def generate_intro(self, adventure: Adventure, party: list[Player]) -> str:
+    async def generate_intro(
+        self,
+        adventure: Adventure,
+        party: list[Player],
+        location_name: str = "",
+        nearby_places: list[str] | None = None,
+    ) -> str:
         """
-        Generate the opening narrative for an adventure.
+        Generate the opening narrative for an adventure, tailored to real nearby places.
         """
         party_context = self._build_party_context(party)
-        
+
+        location_lines = ""
+        if location_name:
+            location_lines += f"\nReal-world setting: {location_name}."
+        if nearby_places:
+            places_str = ", ".join(nearby_places[:6])
+            location_lines += (
+                f"\nNearby real locations transformed into dungeon rooms: {places_str}. "
+                "Weave these real place names naturally into the narrative with dark fantasy flavor."
+            )
+
         prompt = f"""Begin a new adventure called "{adventure.name}".
 
 Adventure Description: {adventure.description}
+{location_lines}
 
 {party_context}
 
 Write an atmospheric opening that:
-1. Sets the scene and establishes the mood
-2. Introduces the initial situation or hook
-3. Gives players a clear sense of what they might do next
+1. Sets the scene using the real-world location as a dark fantasy setting
+2. Introduces a specific quest hook tied to one of the nearby places (if provided)
+3. Gives players a vivid sense of immediate danger or intrigue
 
-Keep it to 2-3 paragraphs. Be vivid and engaging."""
+Keep it to 2-3 paragraphs. Name-drop the real places with fantasy names. Be cinematic and urgent."""
 
         try:
             response = self._client.messages.create(

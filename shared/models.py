@@ -292,6 +292,7 @@ class Room(BaseModel):
 class DungeonState(BaseModel):
     rooms: dict[str, Room] = Field(default_factory=dict)
     current_room_id: str = ""
+    prev_room_id: str = ""
     total_rooms: int = 0
     rooms_cleared: int = 0
     gold_collected: int = 0

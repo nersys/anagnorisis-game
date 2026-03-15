@@ -727,6 +727,18 @@ html, body {
 }
 .flee-btn:hover:not(:disabled) { border-color: var(--orange); color: var(--orange); }
 
+.contextual-actions { flex-wrap: wrap; gap: 6px; }
+.contextual-action-btn {
+  font-size: 12px; padding: 5px 10px; border-radius: var(--radius);
+  border: 1px solid rgba(201,168,76,0.3); color: var(--gold);
+  background: rgba(201,168,76,0.06); cursor: pointer; transition: all 0.2s;
+  white-space: nowrap;
+}
+.contextual-action-btn:hover:not(:disabled) {
+  background: rgba(201,168,76,0.15); border-color: var(--gold); box-shadow: 0 0 8px rgba(201,168,76,0.3);
+}
+.contextual-action-btn:disabled { opacity: 0.4; cursor: default; }
+
 /* ─── Right Panel ─── */
 .game-right {
   display: flex; flex-direction: column; gap: 8px;

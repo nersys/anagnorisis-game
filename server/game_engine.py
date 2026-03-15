@@ -553,12 +553,18 @@ class GameEngine:
             self._player_phase[pid] = GamePhase.EXPLORING
             self._player_attack_buff[pid] = 0
 
-        # Get intro from AI DM if available
+        # Get intro from AI DM if available — pass real-world location context
         start_room = self._player_dungeons[party.member_ids[0]].rooms["r0"]
         intro_narrative = start_room.description
         if self._dm:
             party_members = [self._players[pid] for pid in party.member_ids if pid in self._players]
-            intro_narrative = await self._dm.generate_intro(adventure, party_members)
+            location_name = payload.get("location_name", "")
+            nearby_names = [p.get("name", "") for p in pois if p.get("name")] if pois else []
+            intro_narrative = await self._dm.generate_intro(
+                adventure, party_members,
+                location_name=location_name,
+                nearby_places=nearby_names,
+            )
 
         # Notify all party members with their dungeon state
         for pid in party.member_ids:
@@ -710,7 +716,8 @@ class GameEngine:
         if not target_room:
             return GameMessage(type=MessageType.ERROR, payload={"error": "Target room not found"})
 
-        # Move player
+        # Move player (track previous for flee)
+        dungeon.prev_room_id = dungeon.current_room_id
         dungeon.current_room_id = target_room_id
         target_room.explored = True
 
@@ -802,6 +809,13 @@ class GameEngine:
                     log.append("You successfully flee the battle!")
                     self._player_phase[player_id] = GamePhase.EXPLORING
                     del self._player_combat[player_id]
+                    # Move player back to previous room so they're not stuck
+                    if dungeon.prev_room_id and dungeon.prev_room_id in dungeon.rooms:
+                        dungeon.current_room_id = dungeon.prev_room_id
+                        flee_room = dungeon.rooms[dungeon.prev_room_id]
+                        flee_room.explored = True
+                    else:
+                        flee_room = dungeon.rooms.get(dungeon.current_room_id)
                     await manager.send_to(connection_id, GameMessage(
                         type=MessageType.COMBAT_UPDATE,
                         payload={
@@ -809,6 +823,8 @@ class GameEngine:
                             "phase": GamePhase.EXPLORING.value,
                             "player_stats": player.stats.model_dump(),
                             "combat": None,
+                            "dungeon": _dungeon_to_dict(dungeon),
+                            "room": flee_room.model_dump() if flee_room else None,
                         }
                     ))
                     return None
