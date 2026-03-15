@@ -48,9 +48,19 @@ def build_system_prompt(
     dungeon_name: str = "",
     personality: str = "balanced",
     personality_notes: str = "",
+    include_full_lore: bool = False,
 ) -> str:
-    """Build the full system prompt with optional personality and location context."""
+    """Build the full system prompt with optional personality, location context, and campaign lore."""
+    from server.story import get_dm_reminder, get_dm_story_context
+
     parts = [BASE_SYSTEM_PROMPT]
+
+    # Always include the brief campaign reminder so the DM stays on-story
+    parts.append(f"\n{get_dm_reminder()}")
+
+    # For intro generation, include the full lore block
+    if include_full_lore:
+        parts.append(f"\nCAMPAIGN LORE (for this response only):\n{get_dm_story_context()}")
 
     modifier = PERSONALITY_MODIFIERS.get(personality, "")
     if modifier:

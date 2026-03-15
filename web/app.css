@@ -655,6 +655,7 @@ html, body {
 .log-entry.narrative { border-color: var(--amber); background: rgba(212,165,74,0.04); color: var(--text); }
 .log-entry.combat    { border-color: var(--red); background: rgba(229,57,53,0.05); color: #ef9a9a; }
 .log-entry.loot      { border-color: var(--gold); background: rgba(201,168,76,0.05); color: var(--gold); }
+.log-entry.player-action { border-color: rgba(255,255,255,0.08); background: rgba(255,255,255,0.02); color: var(--text-dim); font-style: italic; }
 .log-entry.system    { border-color: var(--ember); background: rgba(200,112,64,0.05); color: var(--ember); }
 .log-entry.victory   { border-color: var(--gold2); background: rgba(240,204,106,0.1); color: var(--gold2); }
 .log-entry.error     { border-color: var(--red); color: var(--red); }
@@ -671,6 +672,44 @@ html, body {
   border-top: 1px solid var(--border);
   display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
   flex-shrink: 0;
+}
+
+/* ── Free-text player action input ── */
+.player-input-row {
+  display: flex; gap: 6px; align-items: center;
+  padding: 8px 12px 10px;
+  background: var(--bg2);
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.player-action-input {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  background: var(--surface);
+  border-color: var(--border2);
+  color: var(--text);
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  transition: border-color 0.2s;
+}
+.player-action-input:focus {
+  outline: none;
+  border-color: var(--gold);
+  box-shadow: 0 0 0 2px rgba(201,168,76,0.15);
+}
+.player-action-input::placeholder { color: var(--text-muted); }
+#btn-player-action-send {
+  background: var(--gold-dim);
+  border-color: var(--gold);
+  color: var(--gold2);
+  font-size: 14px;
+  padding: 8px 14px;
+  flex-shrink: 0;
+}
+#btn-player-action-send:hover {
+  background: var(--gold);
+  color: var(--bg);
 }
 .action-group { display: flex; gap: 6px; }
 .dir-btn {
@@ -891,6 +930,23 @@ html, body {
 }
 .la-marker__dot--enemy { background: var(--red); }
 .la-marker__dot--clear { background: var(--green); }
+/* ── Discovery POI dots (non-dungeon nearby places) ── */
+.la-poi-dot {
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  background: rgba(40, 30, 20, 0.75);
+  border: 1px solid rgba(160, 140, 80, 0.3);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px;
+  cursor: pointer;
+  transition: transform 0.15s ease, border-color 0.15s ease;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.5);
+}
+.la-poi-dot:hover {
+  transform: scale(1.25);
+  border-color: rgba(201,168,76,0.6);
+}
+
 .la-marker__ring {
   position: absolute; inset: -6px;
   border-radius: 50%;
