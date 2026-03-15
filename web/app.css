@@ -592,14 +592,19 @@ html, body {
 .scene-wrapper {
   position: relative;
   flex-shrink: 0;
-  height: 220px;
   overflow: hidden;
   background: var(--bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  max-height: 320px;
 }
 .scene-image {
-  width: 100%; height: 100%;
-  object-fit: cover;
+  width: 100%; height: auto;
+  max-height: 320px;
+  object-fit: contain;
   transition: opacity 0.6s ease;
+  display: block;
 }
 .scene-image.loading { opacity: 0.3; }
 .scene-overlay {
