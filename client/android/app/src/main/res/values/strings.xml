@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Anagnorisis</string>
+    <string name="settings_title">Settings</string>
+    <string name="pref_server_url_title">Server URL</string>
+    <string name="pref_server_url_dialog">IP address of the PC running the Anagnorisis server.\n\nExample: http://192.168.1.42:8000\n\nBoth devices must be on the same Wi-Fi.</string>
+    <string name="pref_server_url_default">http://192.168.1.100:8000</string>
+    <string name="error_title">Cannot reach server</string>
+    <string name="error_msg">Make sure the Anagnorisis server is running on your PC and both devices are on the same Wi-Fi.\n\nUpdate the server IP in Settings.</string>
+    <string name="btn_settings">Settings</string>
+    <string name="btn_retry">Retry</string>
+</resources>
