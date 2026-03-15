@@ -230,16 +230,31 @@ The air is thick with anticipation. What do you do?"""
         """
         success = roll_total >= dc
         outcome = "SUCCESS" if success else "FAILURE"
+        margin = roll_total - dc
+
+        if success:
+            if margin >= 5:
+                degree = "CRITICAL SUCCESS — they exceed expectations. Describe something exceptional happening beyond the basic goal."
+            else:
+                degree = "NARROW SUCCESS — they just barely manage it. They achieve the goal but perhaps with effort or a minor hitch."
+        else:
+            if margin <= -5:
+                degree = "CRITICAL FAILURE — something goes badly wrong. A clear setback, complication, or unintended consequence occurs."
+            else:
+                degree = "NARROW FAILURE — they come very close but fall short. The task fails, with a clear visible downside."
 
         prompt = (
-            f"The player attempted: \"{original_action}\"\n\n"
-            f"You (the DM) had set up this scene:\n{setup_narrative}\n\n"
-            f"The player rolled {die} + {stat} modifier = {roll_total} vs DC {dc}.\n"
-            f"Result: {outcome}.\n\n"
-            f"Now describe the outcome in 1-2 paragraphs. Be dramatic. "
-            f"On success, let them achieve their goal with flair. "
-            f"On failure, something goes wrong — but keep the story moving. "
-            f"Do NOT include another [[ROLL]] tag."
+            f"=== DICE ROLL RESOLUTION ===\n"
+            f"Player action: \"{original_action}\"\n"
+            f"Your setup: {setup_narrative}\n\n"
+            f"Roll: {die} + {stat} mod = {roll_total}  |  DC {dc}  |  RESULT: *** {outcome} *** ({degree})\n\n"
+            f"MANDATORY RULES:\n"
+            f"1. The outcome is {outcome} — you MUST honor it. Never reverse or soften it.\n"
+            f"2. On SUCCESS: show specifically how \"{original_action}\" succeeds — what happens, what changes.\n"
+            f"   On FAILURE: show specifically how \"{original_action}\" fails — what goes wrong, what the consequence is.\n"
+            f"3. Be concrete and tied to THIS specific action — no generic 'you try hard' filler.\n"
+            f"4. 2-3 tight sentences. End on a new hook, threat, or choice.\n"
+            f"5. Do NOT embed a [[ROLL]] tag."
         )
 
         # Use adventure memory so the DM remembers the full context
@@ -249,7 +264,7 @@ The air is thick with anticipation. What do you do?"""
         try:
             response = self._client.messages.create(
                 model=self._model,
-                max_tokens=300,
+                max_tokens=350,
                 system=build_system_prompt(
                     dungeon_name=adventure.name,
                     personality=self._personality,

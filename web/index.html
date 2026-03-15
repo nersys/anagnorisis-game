@@ -444,6 +444,20 @@
 
             <hr class="divider" />
 
+            <!-- Scene Art -->
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+              <div>
+                <div style="font-weight:600;font-size:13px">Scene Art</div>
+                <div style="font-size:11px;color:var(--text-muted)">Generate AI images for each room (uses DALL-E)</div>
+              </div>
+              <label class="dm-toggle-wrap" title="Toggle scene art on/off">
+                <input type="checkbox" id="scene-image-toggle" checked />
+                <span class="dm-toggle-slider"></span>
+              </label>
+            </div>
+
+            <hr class="divider" />
+
             <!-- Memory -->
             <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
               <div>
@@ -463,6 +477,6 @@
   </div><!-- end #app -->
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="/static/js/bundle.js?v=22"></script>
+  <script src="/static/js/bundle.js?v=23"></script>
 </body>
 </html>
