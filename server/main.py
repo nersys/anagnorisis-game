@@ -247,22 +247,34 @@ async def location_history(
 async def find_taverns(
     lat: float = Query(...),
     lng: float = Query(...),
-    radius: int = Query(600, description="Search radius in metres"),
+    radius: int = Query(1200, description="Search radius in metres"),
 ):
     """
     Find real bars/pubs/restaurants near the given coordinates using OpenStreetMap Overpass API.
-    Returns them formatted as in-game taverns.
+    Returns them formatted as in-game taverns with distance from the player.
     """
+    import math
+
+    def haversine(lat1, lng1, lat2, lng2) -> int:
+        """Return distance in metres between two lat/lng points."""
+        R = 6371000
+        phi1, phi2 = math.radians(lat1), math.radians(lat2)
+        dphi = math.radians(lat2 - lat1)
+        dlam = math.radians(lng2 - lng1)
+        a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlam / 2) ** 2
+        return int(R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a)))
+
     overpass_query = f"""
-[out:json][timeout:10];
+[out:json][timeout:15];
 (
-  node[amenity~"^(bar|pub|restaurant|cafe)$"](around:{radius},{lat},{lng});
+  node[amenity~"^(bar|pub|restaurant|cafe|biergarten|food_court)$"](around:{radius},{lat},{lng});
+  way[amenity~"^(bar|pub|restaurant|cafe|biergarten|food_court)$"](around:{radius},{lat},{lng});
 );
-out 12;
+out center 20;
 """
     taverns = []
     try:
-        async with httpx.AsyncClient(timeout=12.0) as client:
+        async with httpx.AsyncClient(timeout=15.0) as client:
             r = await client.post(
                 "https://overpass-api.de/api/interpreter",
                 data={"data": overpass_query},
@@ -276,40 +288,43 @@ out 12;
                     if not real_name:
                         continue
                     amenity = tags.get("amenity", "bar")
-                    # Map real amenity to game tavern type
-                    if amenity in ("bar", "pub"):
-                        ttype, emoji = "tavern", "🍺"
+                    if amenity in ("bar", "pub", "biergarten"):
+                        ttype, emoji = "bar", "🍺"
                     elif amenity == "cafe":
-                        ttype, emoji = "inn", "☕"
+                        ttype, emoji = "café", "☕"
                     else:
-                        ttype, emoji = "alehouse", "🍖"
+                        ttype, emoji = "restaurant", "🍖"
+
+                    # Prefer node lat/lng; for ways use center
+                    elat = el.get("lat") or (el.get("center", {}) or {}).get("lat", lat)
+                    elng = el.get("lon") or (el.get("center", {}) or {}).get("lon", lng)
+                    dist = haversine(lat, lng, elat, elng)
+
+                    # Build a short address from OSM tags
+                    addr_parts = [
+                        tags.get("addr:housenumber", ""),
+                        tags.get("addr:street", ""),
+                    ]
+                    address = " ".join(p for p in addr_parts if p) or tags.get("addr:full", "")
 
                     taverns.append({
                         "name": real_name,
                         "type": ttype,
                         "emoji": emoji,
                         "amenity": amenity,
-                        "lat": el.get("lat", lat),
-                        "lng": el.get("lon", lng),
-                        "cuisine": tags.get("cuisine", ""),
+                        "lat": elat,
+                        "lng": elng,
+                        "cuisine": tags.get("cuisine", "").replace(";", ", "),
                         "opening_hours": tags.get("opening_hours", ""),
+                        "address": address,
+                        "distance_m": dist,
                     })
     except Exception as e:
         logger.warning(f"Overpass API failed: {e}")
 
-    # If too few results, pad with thematic placeholders
-    fallback_names = [
-        ("The Wandering Blade", "tavern", "🍺"),
-        ("The Dusty Flagon", "tavern", "🍺"),
-        ("Crossroads Inn", "inn", "🛏"),
-        ("The Healer's Hearth", "inn", "☕"),
-    ]
-    for fname, ftype, femoji in fallback_names:
-        if len(taverns) >= 6:
-            break
-        taverns.append({"name": fname, "type": ftype, "emoji": femoji, "amenity": ftype, "lat": lat, "lng": lng, "cuisine": "", "opening_hours": ""})
-
-    return {"taverns": taverns[:8], "location": {"lat": lat, "lng": lng}}
+    # Sort by distance; return closest 10
+    taverns.sort(key=lambda t: t["distance_m"])
+    return {"taverns": taverns[:10], "location": {"lat": lat, "lng": lng}}
 
 
 @app.get("/nearby-rooms")

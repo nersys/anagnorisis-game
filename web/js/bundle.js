@@ -1748,15 +1748,25 @@ async function showLocationHistory() {
 // ═══════════════════════════════════════════════════════
 
 async function showTaverns() {
+  // Use real GPS position first; fall back to room map position
+  const gps = getPosition();
   const room = currentRoomData;
-  const locationName = (laMap && laMap.getRoomName(room && room.id)) || (room && room.name) || 'your location';
-  const lat = (laMap && room && laMap.roomLocations[room.id]) ? laMap.roomLocations[room.id][0] : 34.0522;
-  const lng = (laMap && room && laMap.roomLocations[room.id]) ? laMap.roomLocations[room.id][1] : -118.2437;
+  let lat, lng, locationName;
+  if (gps && gps.lat) {
+    lat = gps.lat;
+    lng = gps.lng;
+    locationName = 'your location';
+  } else if (laMap && room && laMap.roomLocations && laMap.roomLocations[room.id]) {
+    [lat, lng] = laMap.roomLocations[room.id];
+    locationName = (laMap.getRoomName && laMap.getRoomName(room.id)) || room.name || 'the area';
+  } else {
+    lat = 34.0522; lng = -118.2437; locationName = 'Los Angeles';
+  }
 
-  const modal   = document.getElementById('tavern-modal');
-  const list    = document.getElementById('tavern-list');
-  const label   = document.getElementById('tavern-location-label');
-  const status  = document.getElementById('tavern-action-status');
+  const modal  = document.getElementById('tavern-modal');
+  const list   = document.getElementById('tavern-list');
+  const label  = document.getElementById('tavern-location-label');
+  const status = document.getElementById('tavern-action-status');
 
   label.textContent = `Near ${locationName}`;
   list.innerHTML = '<div class="status-line"><span class="spinner"></span><span>Scouting establishments...</span></div>';
@@ -1769,23 +1779,32 @@ async function showTaverns() {
     const taverns = data.taverns || [];
 
     if (!taverns.length) {
-      list.innerHTML = '<div class="empty-state">No taverns found nearby. The wilderness is barren.</div>';
+      list.innerHTML = '<div class="empty-state">No real establishments found nearby. Try moving closer to a populated area.</div>';
       return;
     }
 
-    list.innerHTML = taverns.map((t, i) => `
+    list.innerHTML = taverns.map(t => {
+      const dist = t.distance_m < 1000
+        ? `${t.distance_m}m away`
+        : `${(t.distance_m / 1000).toFixed(1)}km away`;
+      const sub = [t.type, t.cuisine].filter(Boolean).join(' · ');
+      const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(t.name + ' ' + (t.address || ''))}`;
+      return `
       <div class="tavern-item">
         <span class="tavern-emoji">${t.emoji}</span>
         <div class="tavern-info">
-          <div class="tavern-name">${t.name}</div>
-          <div class="tavern-type">${t.type}${t.cuisine ? ' · ' + t.cuisine : ''}</div>
-          ${t.opening_hours ? `<div class="tavern-cuisine">⏰ ${t.opening_hours}</div>` : ''}
+          <div class="tavern-name">
+            <a href="${mapsUrl}" target="_blank" rel="noopener" style="color:inherit;text-decoration:none" title="Open in Google Maps">${t.name} ↗</a>
+          </div>
+          <div class="tavern-type">${sub}</div>
+          ${t.address ? `<div class="tavern-cuisine" style="color:var(--text-dim)">${t.address}</div>` : ''}
+          <div class="tavern-cuisine" style="color:var(--text-muted);font-size:11px">${dist}${t.opening_hours ? ' · ' + t.opening_hours : ''}</div>
         </div>
         <button class="tavern-visit-btn" onclick="visitTavern('${t.name.replace(/'/g,"\\'")}')">Visit</button>
-      </div>
-    `).join('');
+      </div>`;
+    }).join('');
   } catch (e) {
-    list.innerHTML = '<p style="color:var(--red);padding:12px">Failed to find nearby taverns.</p>';
+    list.innerHTML = '<p style="color:var(--red);padding:12px">Failed to find nearby establishments.</p>';
   }
 }
 
