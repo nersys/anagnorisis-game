@@ -513,7 +513,25 @@ html, body {
 }
 
 .map-panel { flex-shrink: 0; }
-#la-map { width: 100%; height: 220px; border-radius: 0; }
+#la-map { width: 100%; height: 320px; border-radius: 0; transition: height 0.25s ease; }
+
+/* Fullscreen map overlay */
+.map-panel--expanded {
+  position: fixed !important;
+  inset: 0;
+  z-index: 8000;
+  border-radius: 0 !important;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+}
+.map-panel--expanded #la-map {
+  flex: 1;
+  height: auto !important;
+  border-radius: 0;
+}
+.map-panel--expanded .panel-header { border-radius: 0; }
+.map-panel--expanded .map-legend { padding: 8px 12px; }
 .map-legend {
   display: flex; gap: 8px; flex-wrap: wrap;
   padding: 6px 10px;

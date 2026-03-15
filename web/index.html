@@ -165,10 +165,14 @@
         <!-- ─── LEFT PANEL ─── -->
         <div class="game-left">
           <!-- Dungeon Map -->
-          <div class="panel map-panel">
+          <div class="panel map-panel" id="map-panel">
             <div class="panel-header">
               <span>🗺 Dungeon Map</span>
-              <span id="map-progress" class="badge-sm">0/7</span>
+              <div style="display:flex;align-items:center;gap:6px">
+                <span id="map-progress" class="badge-sm">0/7</span>
+                <button id="btn-expand-map" class="btn btn-ghost btn-sm btn-icon-only"
+                  title="Expand map" style="width:24px;height:24px;font-size:12px;padding:0">⛶</button>
+              </div>
             </div>
             <div id="la-map"></div>
             <div class="map-legend">
