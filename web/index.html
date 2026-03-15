@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Cinzel+Decorative:wght@400;700&family=Roboto+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <link rel="stylesheet" href="/static/app.css?v=7" />
+  <link rel="stylesheet" href="/static/app.css?v=8" />
 </head>
 <body>
   <div id="app">
@@ -168,6 +168,7 @@
     <!-- GAME SCREEN                             -->
     <!-- ═══════════════════════════════════════ -->
     <div id="screen-game" class="screen">
+      <canvas id="game-particles" class="game-particles-canvas"></canvas>
       <div class="game-layout">
 
         <!-- ─── LEFT PANEL ─── -->
@@ -245,6 +246,9 @@
               <!-- Populated by JS -->
             </div>
           </div>
+
+          <!-- Explore Toolbar — quick actions (hidden in combat) -->
+          <div class="explore-toolbar" id="explore-toolbar"></div>
 
           <!-- Action Bar -->
           <div class="action-bar" id="action-bar">
@@ -477,6 +481,6 @@
   </div><!-- end #app -->
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="/static/js/bundle.js?v=24"></script>
+  <script src="/static/js/bundle.js?v=25"></script>
 </body>
 </html>

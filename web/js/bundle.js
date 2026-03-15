@@ -664,11 +664,36 @@ function _gpsEmit() {
 function ps(player) { return (player && player.stats) ? player.stats : (player || {}); }
 
 const CLASSES = {
-  warrior: { emoji: '⚔️', name: 'Warrior', tag: 'Tank & Brawler', color: '#e53935' },
-  mage:    { emoji: '🔮', name: 'Mage',    tag: 'Arcane Power',  color: '#7c3aed' },
-  rogue:   { emoji: '🗡️', name: 'Rogue',   tag: 'Swift & Deadly', color: '#1e88e5' },
-  cleric:  { emoji: '✨', name: 'Cleric',  tag: 'Divine Healer', color: '#f0cc6a' },
-  ranger:  { emoji: '🏹', name: 'Ranger',  tag: 'Eagle Eye',     color: '#43a047' },
+  warrior: {
+    emoji: '⚔️', figure: '🪖', weapon: '🗡️', name: 'Warrior', tag: 'Iron & Blood',
+    color: '#e53935', colorDim: 'rgba(229,57,53,0.15)', anim: 'warrior-float',
+    lore: 'Forged in countless battles, you are a living weapon — iron will, iron fists.',
+    stats: { str: 5, int: 1, dex: 3, hp: 5 },
+  },
+  mage: {
+    emoji: '🔮', figure: '🧙', weapon: '✨', name: 'Mage', tag: 'Arcane Sovereign',
+    color: '#9060e0', colorDim: 'rgba(144,96,224,0.15)', anim: 'mage-pulse',
+    lore: 'Master of the arcane arts. Reality bends to your will, but flesh is fragile.',
+    stats: { str: 1, int: 5, dex: 2, hp: 2 },
+  },
+  rogue: {
+    emoji: '🗡️', figure: '🥷', weapon: '💨', name: 'Rogue', tag: 'Shadow & Steel',
+    color: '#d4a54a', colorDim: 'rgba(212,165,74,0.15)', anim: 'rogue-flicker',
+    lore: 'From the shadows you strike — unseen, unheard, unstoppable.',
+    stats: { str: 3, int: 2, dex: 5, hp: 3 },
+  },
+  cleric: {
+    emoji: '✨', figure: '🧝', weapon: '🙏', name: 'Cleric', tag: 'Light of the Divine',
+    color: '#f0cc6a', colorDim: 'rgba(240,204,106,0.15)', anim: 'cleric-glow',
+    lore: 'Blessed by the gods, you channel divine light to heal allies and smite evil.',
+    stats: { str: 2, int: 4, dex: 2, hp: 4 },
+  },
+  ranger: {
+    emoji: '🏹', figure: '🧙‍♀️', weapon: '🌿', name: 'Ranger', tag: 'Eyes of the Wild',
+    color: '#43a047', colorDim: 'rgba(67,160,71,0.15)', anim: 'ranger-sway',
+    lore: 'One with nature — your arrows fly true and the wilderness answers your call.',
+    stats: { str: 3, int: 3, dex: 4, hp: 3 },
+  },
 };
 
 const SKILLS = {
@@ -798,6 +823,120 @@ async function narratorSpeak(text) {
 }
 
 // ═══════════════════════════════════════════════════════
+// GAME SCREEN PARTICLES
+// ═══════════════════════════════════════════════════════
+
+let _particlesRAF = null;
+
+function initGameParticles() {
+  const canvas = document.getElementById('game-particles');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+
+  function resize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  const PALETTES = [
+    ['#ffd54f','#ffca28','#ffb300'],  // gold embers
+    ['#ef9a9a','#e57373','#c62828'],  // ember red
+    ['#ce93d8','#ba68c8','#7b1fa2'],  // arcane purple
+    ['#80cbc4','#4db6ac','#00695c'],  // mystical teal
+  ];
+  const COUNT = 40;
+  const particles = Array.from({ length: COUNT }, () => {
+    const pal = PALETTES[Math.floor(Math.random() * PALETTES.length)];
+    return {
+      x: Math.random() * window.innerWidth,
+      y: Math.random() * window.innerHeight,
+      vx: (Math.random() - 0.5) * 0.4,
+      vy: -(Math.random() * 0.5 + 0.2),
+      r: Math.random() * 2.5 + 0.8,
+      alpha: Math.random() * 0.5 + 0.15,
+      color: pal[Math.floor(Math.random() * pal.length)],
+      life: Math.random(),
+    };
+  });
+
+  if (_particlesRAF) cancelAnimationFrame(_particlesRAF);
+
+  function tick() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    particles.forEach(p => {
+      p.x += p.vx;
+      p.y += p.vy;
+      p.life -= 0.003;
+      if (p.life <= 0 || p.y < -10) {
+        p.x = Math.random() * canvas.width;
+        p.y = canvas.height + 5;
+        p.life = 1;
+        p.vy = -(Math.random() * 0.5 + 0.2);
+        p.vx = (Math.random() - 0.5) * 0.4;
+      }
+      const a = p.alpha * Math.min(p.life * 2, 1);
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fillStyle = p.color;
+      ctx.globalAlpha = a;
+      ctx.fill();
+    });
+    ctx.globalAlpha = 1;
+    _particlesRAF = requestAnimationFrame(tick);
+  }
+  _particlesRAF = requestAnimationFrame(tick);
+}
+
+// ═══════════════════════════════════════════════════════
+// EXPLORE TOOLBAR (quick actions, hidden in combat)
+// ═══════════════════════════════════════════════════════
+
+function renderExploreToolbar() {
+  const toolbar = document.getElementById('explore-toolbar');
+  if (!toolbar) return;
+  const phase = state.phase || 'exploring';
+
+  if (phase === 'combat') {
+    toolbar.style.display = 'none';
+    return;
+  }
+  toolbar.style.display = '';
+
+  const cls = (state.player && state.player.player_class) || 'warrior';
+  const hp = state.player ? ps(state.player).hp : 100;
+  const maxHp = state.player ? ps(state.player).maxHp : 100;
+  const needsRest = hp < maxHp * 0.9;
+
+  const classAction = cls === 'mage' || cls === 'cleric'
+    ? `<button class="explore-btn btn-pray" data-action="meditate">🧘 Meditate</button>`
+    : `<button class="explore-btn btn-pray" data-action="pray">🙏 Pray</button>`;
+
+  toolbar.innerHTML = `
+    <span class="explore-toolbar-label">Quick Actions</span>
+    <button class="explore-btn btn-introspect" data-action="introspect">🔍 Introspect</button>
+    <button class="explore-btn btn-examine" data-action="examine">🧐 Examine</button>
+    ${needsRest ? `<button class="explore-btn btn-rest" data-action="rest">💤 Rest</button>` : ''}
+    ${classAction}
+  `;
+
+  const actions = {
+    introspect: 'I look inward, reflecting on my journey so far and the choices that brought me here.',
+    examine: 'I carefully examine my surroundings, searching for anything hidden or noteworthy.',
+    rest: 'I take a moment to rest and catch my breath, tending to my wounds.',
+    pray: 'I close my eyes and offer a prayer to the gods for strength and guidance.',
+    meditate: 'I sit quietly and meditate, centering my mind and recovering my focus.',
+  };
+
+  toolbar.querySelectorAll('.explore-btn[data-action]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      sendPlayerInput(actions[btn.dataset.action] || btn.dataset.action);
+    });
+  });
+}
+
+// ═══════════════════════════════════════════════════════
 // SCREEN ROUTER
 // ═══════════════════════════════════════════════════════
 
@@ -812,6 +951,7 @@ function showScreen(name) {
       setupMapCanvas();
       renderGameUI();
       invalidateMapSize();
+      try { initGameParticles(); } catch(e) { /* non-critical */ }
     }, 80);
   }
 }
@@ -821,14 +961,29 @@ function showScreen(name) {
 // ═══════════════════════════════════════════════════════
 
 function initLogin() {
-  // Render class cards FIRST — particles are optional eye candy
+  // Render class portrait cards FIRST — particles are optional eye candy
   const grid = document.getElementById('class-grid');
+  const statBar = (v, color, max = 5) =>
+    `<div class="cls-stat-bar"><div class="cls-stat-fill" style="width:${(v/max)*100}%;background:${color}"></div></div>`;
   grid.innerHTML = Object.entries(CLASSES).map(([key, cls]) => `
-    <div class="class-card ${key === selectedClass ? 'selected' : ''}"
-         data-class="${key}" style="--class-color:${cls.color}">
-      <span class="class-emoji">${cls.emoji}</span>
-      <span class="class-name">${cls.name}</span>
-      <span class="class-tag">${cls.tag}</span>
+    <div class="class-card ${key === selectedClass ? 'selected' : ''}" data-class="${key}"
+         style="--class-color:${cls.color};--class-color-dim:${cls.colorDim || 'rgba(255,255,255,0.05)'}">
+      <div class="class-portrait">
+        <div class="class-portrait-aura"></div>
+        <div class="class-figure ${cls.anim || ''}">${cls.figure || cls.emoji}</div>
+        <div class="class-weapon">${cls.weapon || ''}</div>
+      </div>
+      <div class="class-info">
+        <span class="class-name">${cls.name}</span>
+        <span class="class-tag">${cls.tag}</span>
+        <div class="class-lore">${cls.lore || ''}</div>
+        <div class="class-stats">
+          <div class="cls-stat-row"><span>STR</span>${statBar(cls.stats.str, cls.color)}</div>
+          <div class="cls-stat-row"><span>INT</span>${statBar(cls.stats.int, cls.color)}</div>
+          <div class="cls-stat-row"><span>DEX</span>${statBar(cls.stats.dex, cls.color)}</div>
+          <div class="cls-stat-row"><span>HP</span>${statBar(cls.stats.hp, cls.color)}</div>
+        </div>
+      </div>
     </div>
   `).join('');
 
@@ -1192,6 +1347,12 @@ function sendPlayerAction() {
   }
   addLog(`▶ ${text}`, 'player-action');
   input.value = '';
+}
+
+function sendPlayerInput(text) {
+  if (!text) return;
+  ws.send('PLAYER_ACTION', { action: text });
+  addLog(`▶ ${text}`, 'player-action');
 }
 
 function initGame() {
@@ -1571,6 +1732,7 @@ function renderPhaseBanner() {
 }
 
 function renderActionBar() {
+  renderExploreToolbar();
   const bar = document.getElementById('action-bar');
   const phase = state.phase || 'exploring';
 
@@ -1679,20 +1841,22 @@ function renderDirectionButtons(container, append) {
 
   const dirs = isPOI
     ? [
-        { key: 'back',    icon: '←', label: 'Back'    },
-        { key: 'forward', icon: '→', label: 'Forward'  },
+        { key: 'back',    icon: '⟵', label: 'Back'    },
+        { key: 'forward', icon: '⟶', label: 'Forward'  },
       ]
     : [
         { key: 'north', icon: '↑', label: 'N' },
-        { key: 'south', icon: '↓', label: 'S' },
         { key: 'west',  icon: '←', label: 'W' },
         { key: 'east',  icon: '→', label: 'E' },
+        { key: 'south', icon: '↓', label: 'S' },
       ];
 
   const group = append ? document.createElement('div') : container;
   if (append) {
-    group.className = 'action-group';
+    group.className = isPOI ? 'action-group action-group--poi' : 'action-group';
     container.appendChild(group);
+  } else if (isPOI) {
+    group.classList.add('action-group--poi');
   }
 
   dirs.forEach(d => {
