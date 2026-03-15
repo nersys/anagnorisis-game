@@ -52,7 +52,15 @@ class AIDungeonMaster:
         """Initialize with Anthropic API key."""
         self._client = Anthropic(api_key=api_key)
         self._model = "claude-sonnet-4-20250514"  # Using Sonnet for good balance of speed/quality
+        self._personality: str = "balanced"
+        self._personality_notes: str = ""
         logger.info(f"AI DM initialized with model: {self._model}")
+
+    def update_personality(self, personality: str, personality_notes: str = "") -> None:
+        """Update DM personality. Takes effect on the next turn."""
+        self._personality = personality
+        self._personality_notes = personality_notes
+        logger.info(f"DM personality updated: {personality}")
     
     def _build_party_context(self, players: list[Player]) -> str:
         """Build a context string describing the party."""
@@ -149,7 +157,11 @@ The air is thick with anticipation. What do you do?"""
         history = list(adventure.conversation_log[-MAX_HISTORY_TURNS:])
         history.append({"role": "user", "content": user_msg})
 
-        system = build_system_prompt(dungeon_name=adventure.name)
+        system = build_system_prompt(
+            dungeon_name=adventure.name,
+            personality=self._personality,
+            personality_notes=self._personality_notes,
+        )
 
         try:
             response = self._client.messages.create(
@@ -232,7 +244,11 @@ The air is thick with anticipation. What do you do?"""
             response = self._client.messages.create(
                 model=self._model,
                 max_tokens=300,
-                system=build_system_prompt(dungeon_name=adventure.name),
+                system=build_system_prompt(
+                    dungeon_name=adventure.name,
+                    personality=self._personality,
+                    personality_notes=self._personality_notes,
+                ),
                 messages=history,
             )
             text = response.content[0].text

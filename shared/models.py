@@ -66,6 +66,9 @@ class MessageType(str, Enum):
     DICE_ROLL_REQUIRED = "dice_roll_required"
     DICE_RESULT = "dice_result"
 
+    # DM configuration
+    DM_CONFIG = "dm_config"
+
     # System
     ERROR = "error"
     SUCCESS = "success"

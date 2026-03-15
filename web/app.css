@@ -1072,6 +1072,50 @@ html, body {
 }
 .tavern-action-status.error { background: var(--red-dim); border-color: var(--red); color: var(--red); }
 
+/* ─── DM Options Modal ─── */
+.dm-personality-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.dm-personality-btn {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-secondary);
+  padding: 8px 10px;
+  font-size: 12px;
+  font-family: var(--font-title);
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  transition: all var(--transition);
+  text-align: center;
+}
+.dm-personality-btn:hover { border-color: var(--gold); color: var(--gold); }
+.dm-personality-btn.active { border-color: var(--gold); background: rgba(201,168,76,0.12); color: var(--gold); font-weight: 700; }
+/* Toggle switch */
+.dm-toggle-wrap { position: relative; display: inline-block; width: 44px; height: 24px; flex-shrink: 0; }
+.dm-toggle-wrap input { opacity: 0; width: 0; height: 0; }
+.dm-toggle-slider {
+  position: absolute; inset: 0;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  cursor: pointer;
+  transition: background var(--transition);
+}
+.dm-toggle-slider:before {
+  content: '';
+  position: absolute;
+  height: 16px; width: 16px;
+  left: 3px; bottom: 3px;
+  background: var(--text-muted);
+  border-radius: 50%;
+  transition: transform var(--transition), background var(--transition);
+}
+.dm-toggle-wrap input:checked + .dm-toggle-slider { background: rgba(201,168,76,0.2); border-color: var(--gold); }
+.dm-toggle-wrap input:checked + .dm-toggle-slider:before { transform: translateX(20px); background: var(--gold); }
+
 /* ─── Companion Chat Panel ─── */
 .companion-panel { display: flex; flex-direction: column; }
 .companion-log {
@@ -1147,3 +1191,4 @@ html, body {
 .outcome-overlay.game_over .outcome-title { color: var(--red); text-shadow: 0 0 40px var(--red); }
 .outcome-text { font-size: 14px; color: var(--text-dim); max-width: 400px; text-align: center; }
 @keyframes fade-in { from{opacity:0;transform:scale(0.9)} to{opacity:1;transform:none} }
+

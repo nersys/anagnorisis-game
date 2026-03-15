@@ -98,6 +98,10 @@ class GameEngine:
         self._pending_dice: dict[str, dict] = {}
         # Per-adventure narrator locks to prevent concurrent narrator invocations
         self._narrator_locks: dict[str, asyncio.Lock] = {}
+        # DM on/off and personality settings (global, not per-adventure)
+        self._dm_enabled: bool = True
+        self._dm_personality: str = "balanced"
+        self._dm_personality_notes: str = ""
     
     async def initialize(self) -> None:
         """Initialize the game engine."""
@@ -151,6 +155,7 @@ class GameEngine:
             MessageType.USE_ITEM: self._handle_use_item,
             MessageType.TAVERN_VISIT: self._handle_tavern_visit,
             MessageType.DICE_RESULT: self._handle_dice_result,
+            MessageType.DM_CONFIG: self._handle_dm_config,
         }
         
         handler = handlers.get(message.type)
@@ -644,7 +649,13 @@ class GameEngine:
                 type=MessageType.ERROR,
                 payload={"error": "No action provided"}
             )
-        
+
+        if not self._dm_enabled:
+            return GameMessage(
+                type=MessageType.ERROR,
+                payload={"error": "The Dungeon Master is currently resting. Re-enable the DM to continue."}
+            )
+
         # Acquire per-adventure lock to prevent two narrators running simultaneously
         if adventure.id not in self._narrator_locks:
             self._narrator_locks[adventure.id] = asyncio.Lock()
@@ -770,6 +781,57 @@ class GameEngine:
             },
         ))
         return None
+
+    async def _handle_dm_config(
+        self,
+        connection_id: str,
+        message: GameMessage,
+        manager: ConnectionManager,
+    ) -> GameMessage:
+        """
+        Handle DM configuration updates from the client.
+
+        Payload fields (all optional):
+        - enabled (bool): enable or disable the DM narrator
+        - personality (str): "grim" | "balanced" | "whimsical" | "brutal"
+        - personality_notes (str): custom freetext DM style instructions
+        - clear_memory (bool): if true, wipe the current adventure's conversation log
+        """
+        payload = message.payload
+
+        if "enabled" in payload:
+            self._dm_enabled = bool(payload["enabled"])
+            logger.info(f"DM enabled: {self._dm_enabled}")
+
+        if "personality" in payload:
+            self._dm_personality = payload["personality"]
+            self._dm_personality_notes = payload.get("personality_notes", self._dm_personality_notes)
+            if self._dm:
+                self._dm.update_personality(self._dm_personality, self._dm_personality_notes)
+
+        if "personality_notes" in payload and "personality" not in payload:
+            self._dm_personality_notes = payload["personality_notes"]
+            if self._dm:
+                self._dm.update_personality(self._dm_personality, self._dm_personality_notes)
+
+        if payload.get("clear_memory"):
+            player_id = self._connection_to_player.get(connection_id)
+            if player_id:
+                for p in self._parties.values():
+                    if player_id in p.member_ids and p.current_adventure_id:
+                        adventure = self._adventures.get(p.current_adventure_id)
+                        if adventure:
+                            adventure.conversation_log.clear()
+                            logger.info(f"Adventure memory cleared for {p.current_adventure_id}")
+                            break
+
+        return GameMessage(
+            type=MessageType.SUCCESS,
+            payload={
+                "dm_enabled": self._dm_enabled,
+                "personality": self._dm_personality,
+            },
+        )
 
     # ============================================
     # Dungeon Movement
