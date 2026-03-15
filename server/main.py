@@ -150,19 +150,21 @@ async def generate_scene_art(
     prompt: str = Query(..., description="Scene description to illustrate"),
 ):
     """
-    Generate a scene image. Tries DALL-E 3 first (if OPENAI_API_KEY is set),
-    falls back to Claude SVG generation.
+    Generate a scene image using DALL-E (if OPENAI_API_KEY is set).
+    Defaults to DALL-E 2. Set USE_DALLE_3=true in .env to use DALL-E 3.
+    Falls back to error if no OPENAI_API_KEY.
     """
     from fastapi.responses import Response
 
-    # ── Try DALL-E 3 ──────────────────────────────────────────────────────────
+    # ── Try DALL-E ────────────────────────────────────────────────────────────
     openai_key = os.getenv("OPENAI_API_KEY")
     if openai_key:
         try:
             import openai as openai_lib
             client = openai_lib.AsyncOpenAI(api_key=openai_key)
-            dalle_model = os.getenv("DALLE_MODEL", "dall-e-2")
-            dalle_size = "1792x1024" if dalle_model == "dall-e-3" else "512x512"
+            use_dalle3 = os.getenv("USE_DALLE_3", "").lower() in ("1", "true", "yes")
+            dalle_model = "dall-e-3" if use_dalle3 else "dall-e-2"
+            dalle_size = "1792x1024" if use_dalle3 else "512x512"
             dalle_prompt = (
                 f"Dark fantasy RPG environment: {prompt}. "
                 "Atmospheric cinematic oil painting, dramatic lighting, "
@@ -180,7 +182,7 @@ async def generate_scene_art(
             from fastapi.responses import JSONResponse
             return JSONResponse({"url": image_url, "source": "dalle3"})
         except Exception as e:
-            logger.warning(f"DALL-E 3 failed ({e}), falling back to Claude SVG")
+            logger.warning(f"DALL-E failed ({e})")
 
     # No OPENAI_API_KEY — client will use Pollinations.ai instead
     from fastapi.responses import JSONResponse
