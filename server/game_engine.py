@@ -96,6 +96,8 @@ class GameEngine:
         self._player_attack_buff: dict[str, int] = {}  # player_id -> bonus attack
         # Pending dice rolls: player_id -> {action, setup_narrative, die, stat, dc, party_id}
         self._pending_dice: dict[str, dict] = {}
+        # Per-adventure narrator locks to prevent concurrent narrator invocations
+        self._narrator_locks: dict[str, asyncio.Lock] = {}
     
     async def initialize(self) -> None:
         """Initialize the game engine."""
@@ -643,14 +645,26 @@ class GameEngine:
                 payload={"error": "No action provided"}
             )
         
-        # Process through AI DM
-        if self._dm:
-            party_members = [self._players[pid] for pid in party.member_ids if pid in self._players]
-            response = await self._dm.process_action(adventure, player, party_members, action_text)
-        else:
-            response = f"[AI DM not available] {player.name} attempts to: {action_text}"
+        # Acquire per-adventure lock to prevent two narrators running simultaneously
+        if adventure.id not in self._narrator_locks:
+            self._narrator_locks[adventure.id] = asyncio.Lock()
+        narrator_lock = self._narrator_locks[adventure.id]
 
-        adventure.last_activity = datetime.utcnow()
+        if narrator_lock.locked():
+            return GameMessage(
+                type=MessageType.ERROR,
+                payload={"error": "The narrator is still speaking — please wait a moment before acting again."}
+            )
+
+        async with narrator_lock:
+            # Process through AI DM
+            if self._dm:
+                party_members = [self._players[pid] for pid in party.member_ids if pid in self._players]
+                response = await self._dm.process_action(adventure, player, party_members, action_text)
+            else:
+                response = f"[AI DM not available] {player.name} attempts to: {action_text}"
+
+            adventure.last_activity = datetime.utcnow()
 
         # Check if the DM embedded a dice roll request
         if self._dm:
