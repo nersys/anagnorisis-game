@@ -166,14 +166,16 @@ async def generate_scene_art(
                 "Atmospheric cinematic oil painting, dramatic lighting, "
                 "concept art style, wide panoramic shot, 16:9 aspect ratio."
             )
+            dalle_model = os.getenv("DALLE_MODEL", "dall-e-2")
+            dalle_size = "1792x1024" if dalle_model == "dall-e-3" else "512x512"
             resp = await client.images.generate(
-                model="dall-e-2",
-                prompt=dalle_prompt[:1000],  # DALL-E 2 limit
-                size="512x512",
+                model=dalle_model,
+                prompt=dalle_prompt[:1000],
+                size=dalle_size,
                 n=1,
             )
             image_url = resp.data[0].url
-            logger.info(f"🎨 DALL-E 2 image generated for: {prompt[:50]}")
+            logger.info(f"🎨 {dalle_model} image generated for: {prompt[:50]}")
             # Return JSON with URL so client can use it directly (avoids CORS/redirect issues)
             from fastapi.responses import JSONResponse
             return JSONResponse({"url": image_url, "source": "dalle3"})
