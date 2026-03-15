@@ -602,54 +602,56 @@ function _pickNarratorVoice() {
   return _narratorVoice;
 }
 
-// Queue of texts to speak (used when voices not loaded yet)
-let _narratorQueue = [];
-let _narratorReady = false;
+// Current narrator audio element (so we can stop it on new speech)
+let _narratorAudio = null;
 
-// Pre-load voices and mark ready; trigger queued speech
-if ('speechSynthesis' in window) {
-  const _initVoices = () => {
-    const voices = speechSynthesis.getVoices();
-    if (voices.length) {
-      _narratorReady = true;
-      _narratorVoice = null; // force re-pick with loaded voices
-      if (_narratorQueue.length) {
-        const pending = _narratorQueue.pop(); // speak only latest
-        _narratorQueue = [];
-        narratorSpeak(pending);
-      }
-    }
-  };
-  speechSynthesis.onvoiceschanged = _initVoices;
-  _initVoices(); // works synchronously in some browsers
-}
-
-function narratorSpeak(text) {
-  if (!narratorEnabled || !('speechSynthesis' in window)) return;
-
-  const clean = text
+function _cleanForSpeech(text) {
+  return text
     .replace(/\[\[ROLL:[^\]]+\]\]/g, '')
-    .replace(/[\u{1F300}-\u{1FAFF}]/gu, '')  // strip emoji
+    .replace(/[\u{1F000}-\u{1FFFF}]/gu, '')
     .replace(/\*{1,2}([^*]+)\*{1,2}/g, '$1')
     .replace(/#+\s/g, '')
+    .replace(/\[([^\]]+)\]/g, '$1')
     .replace(/\s+/g, ' ')
     .trim();
-  if (!clean) return;
+}
 
-  if (!_narratorReady) {
-    // Voices not loaded yet — queue and wait
-    _narratorQueue = [clean];
-    return;
-  }
-
+function _speakFallback(clean) {
+  // Web Speech API fallback — robotic but works without API key
+  if (!('speechSynthesis' in window)) return;
+  const voices = speechSynthesis.getVoices();
   speechSynthesis.cancel();
   const utter = new SpeechSynthesisUtterance(clean);
-  utter.rate = 0.88;
-  utter.pitch = 0.85;
-  utter.volume = 1.0;
-  const voice = _pickNarratorVoice();
+  utter.rate = 0.88; utter.pitch = 0.85; utter.volume = 1.0;
+  const voice = voices.find(v => /en-GB/i.test(v.lang) && /male/i.test(v.name))
+    || voices.find(v => /en/i.test(v.lang) && /male/i.test(v.name))
+    || voices.find(v => /en/i.test(v.lang));
   if (voice) utter.voice = voice;
   speechSynthesis.speak(utter);
+}
+
+async function narratorSpeak(text) {
+  if (!narratorEnabled) return;
+  const clean = _cleanForSpeech(text);
+  if (!clean) return;
+
+  // Stop any currently playing narration
+  if (_narratorAudio) { _narratorAudio.pause(); _narratorAudio = null; }
+  if ('speechSynthesis' in window) speechSynthesis.cancel();
+
+  try {
+    const res = await fetch(`/tts?text=${encodeURIComponent(clean)}`);
+    if (!res.ok) throw new Error('no tts');
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+    _narratorAudio = audio;
+    audio.onended = () => URL.revokeObjectURL(url);
+    await audio.play();
+  } catch {
+    // Fall back to browser TTS
+    _speakFallback(clean);
+  }
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1020,7 +1022,10 @@ function initGame() {
     const btn = document.getElementById('btn-narrator');
     btn.textContent = narratorEnabled ? '🔊' : '🔇';
     btn.title = narratorEnabled ? 'Narrator ON — click to mute' : 'Narrator OFF — click to enable';
-    if (!narratorEnabled) speechSynthesis.cancel();
+    if (!narratorEnabled) {
+      if (_narratorAudio) { _narratorAudio.pause(); _narratorAudio = null; }
+      if ('speechSynthesis' in window) speechSynthesis.cancel();
+    }
   });
 
   // ── Map expand ──

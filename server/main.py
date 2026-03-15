@@ -243,6 +243,40 @@ async def location_history(
         return {"title": name, "extract": f"The ancient records of {name} have been lost to time...", "thumbnail": None, "url": None, "source": "fallback"}
 
 
+@app.get("/tts")
+async def text_to_speech(
+    text: str = Query(..., description="Text to narrate"),
+    voice: str = Query("onyx", description="OpenAI TTS voice"),
+):
+    """
+    Convert text to speech using OpenAI TTS (tts-1-hd).
+    Returns MP3 audio. Requires OPENAI_API_KEY.
+    """
+    from fastapi.responses import Response
+    openai_key = os.getenv("OPENAI_API_KEY")
+    if not openai_key:
+        return Response(status_code=404)
+
+    # Truncate to avoid huge requests (OpenAI TTS limit is 4096 chars)
+    narration = text[:2000]
+
+    try:
+        import openai as openai_lib
+        client = openai_lib.AsyncOpenAI(api_key=openai_key)
+        response = await client.audio.speech.create(
+            model="tts-1-hd",
+            voice=voice,      # onyx = deep dramatic male; fable = storyteller
+            input=narration,
+            response_format="mp3",
+            speed=0.9,        # Slightly slower for gravitas
+        )
+        audio_bytes = response.content
+        return Response(content=audio_bytes, media_type="audio/mpeg")
+    except Exception as e:
+        logger.warning(f"OpenAI TTS failed: {e}")
+        return Response(status_code=500)
+
+
 @app.get("/taverns")
 async def find_taverns(
     lat: float = Query(...),
