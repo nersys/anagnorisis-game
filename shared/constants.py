@@ -86,6 +86,35 @@ CLASS_STARTING_SKILLS = {
     "ranger": ["aimed_shot", "trap", "animal_companion"],
 }
 
+# Companion auto-actions in combat (one action per turn after enemy attacks)
+COMPANION_ACTIONS = {
+    "warrior": {
+        "name": "Bryn", "emoji": "🛡",
+        "action": "shield", "value": 1,
+        "msg": "Bryn interposes his shield — you're shielded for the next hit!",
+    },
+    "mage": {
+        "name": "Luma", "emoji": "✨",
+        "action": "damage", "dtype": "arcane", "value": 0.55,
+        "msg": "Luma hurls an arcane bolt — {dmg} arcane damage!",
+    },
+    "rogue": {
+        "name": "Shade", "emoji": "🌑",
+        "action": "damage", "dtype": "physical", "value": 0.45,
+        "msg": "Shade strikes from the shadows — {dmg} damage!",
+    },
+    "cleric": {
+        "name": "Seraph", "emoji": "☀️",
+        "action": "heal", "value": 0.10,
+        "msg": "Seraph channels holy light — you recover {v} HP!",
+    },
+    "ranger": {
+        "name": "Fang", "emoji": "🐺",
+        "action": "damage", "dtype": "nature", "value": 0.65,
+        "msg": "Fang lunges at the enemy — {dmg} nature damage!",
+    },
+}
+
 # Starting inventory by class
 CLASS_STARTING_INVENTORY = {
     "warrior": ["iron_sword", "wooden_shield", "health_potion"],

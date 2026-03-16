@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Cinzel+Decorative:wght@400;700&family=Roboto+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <link rel="stylesheet" href="/static/app.css?v=9" />
+  <link rel="stylesheet" href="/static/app.css?v=10" />
 </head>
 <body>
   <div id="app">
@@ -231,12 +231,16 @@
             </div>
             <div class="scene-room-name" id="scene-room-name"></div>
             <div class="scene-action-btns">
-              <button class="btn btn-ghost btn-sm scene-regen-btn" id="btn-narrator" title="Narrator ON — click to mute" style="font-size:16px">🔊</button>
               <button class="btn btn-ghost btn-sm scene-regen-btn" id="btn-dm-options" title="DM Options">🎭</button>
               <button class="btn btn-ghost btn-sm scene-regen-btn" id="btn-regen-image" title="Regenerate scene art">🎨</button>
-              <button class="btn btn-ghost btn-sm scene-regen-btn" id="btn-location-history" title="Location history">📜</button>
-              <button class="btn btn-ghost btn-sm scene-regen-btn" id="btn-find-taverns" title="Find nearby taverns">🍺</button>
             </div>
+          </div>
+
+          <!-- Scene Utility Toolbar — always visible even when scene art is off -->
+          <div class="scene-toolbar" id="scene-toolbar">
+            <button class="btn btn-ghost btn-sm scene-regen-btn" id="btn-narrator" title="Narrator ON — click to mute" style="font-size:16px">🔊</button>
+            <button class="btn btn-ghost btn-sm scene-regen-btn" id="btn-location-history" title="Location history">📜</button>
+            <button class="btn btn-ghost btn-sm scene-regen-btn" id="btn-find-taverns" title="Find nearby taverns">🍺</button>
           </div>
 
           <!-- Narrative Log -->
@@ -484,6 +488,14 @@
   </div><!-- end #app -->
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="/static/js/bundle.js?v=26"></script>
+  <script src="/static/js/bundle.js?v=27"></script>
+
+  <!-- Character Portrait — fixed bottom-right overlay -->
+  <div id="char-portrait-wrap" class="char-portrait-wrap hidden">
+    <div id="char-portrait-figure" class="char-portrait-figure">
+      <div id="char-portrait-svg"></div>
+    </div>
+    <div id="char-portrait-label" class="char-portrait-label"></div>
+  </div>
 </body>
 </html>

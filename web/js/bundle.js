@@ -1692,6 +1692,257 @@ function initGame() {
   window._selectedTavernService = 'ale';
 }
 
+// ═══════════════════════════════════════════════════════
+// CHARACTER PORTRAIT — animated pixel-art sprite
+// ═══════════════════════════════════════════════════════
+
+const CHARACTER_SPRITES = {
+  warrior: () => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 112 168" width="112" height="168">
+    <!-- helmet -->
+    <rect x="35" y="7" width="42" height="6" fill="#9e9e9e"/>
+    <rect x="28" y="13" width="56" height="6" fill="#9e9e9e"/>
+    <rect x="28" y="19" width="56" height="12" fill="#bdbdbd"/>
+    <!-- visor slit -->
+    <rect x="35" y="25" width="14" height="6" fill="#37474f"/>
+    <rect x="63" y="25" width="14" height="6" fill="#37474f"/>
+    <!-- face -->
+    <rect x="35" y="31" width="42" height="8" fill="#ffcc80"/>
+    <!-- neck -->
+    <rect x="42" y="39" width="28" height="6" fill="#9e9e9e"/>
+    <!-- pauldrons -->
+    <rect x="14" y="45" width="21" height="14" fill="#78909c"/>
+    <rect x="77" y="45" width="21" height="14" fill="#78909c"/>
+    <!-- chest armor -->
+    <rect x="28" y="45" width="56" height="28" fill="#c62828"/>
+    <!-- chainmail center -->
+    <rect x="35" y="52" width="42" height="14" fill="#78909c"/>
+    <!-- belt -->
+    <rect x="28" y="73" width="56" height="7" fill="#5d4037"/>
+    <rect x="49" y="73" width="14" height="7" fill="#ffc107"/>
+    <!-- left arm -->
+    <rect x="7" y="59" width="14" height="28" fill="#78909c"/>
+    <!-- shield (left hand) -->
+    <rect x="0" y="73" width="14" height="28" fill="#546e7a"/>
+    <rect x="3" y="76" width="8" height="22" fill="#78909c"/>
+    <rect x="5" y="84" width="4" height="6" fill="#ffc107"/>
+    <!-- right arm -->
+    <rect x="91" y="59" width="14" height="21" fill="#78909c"/>
+    <!-- sword (right hand) -->
+    <rect x="101" y="66" width="7" height="42" fill="#bdbdbd"/>
+    <rect x="94" y="80" width="21" height="7" fill="#ffc107"/>
+    <rect x="103" y="108" width="5" height="14" fill="#ffc107"/>
+    <!-- legs -->
+    <rect x="28" y="80" width="24" height="42" fill="#c62828"/>
+    <rect x="60" y="80" width="24" height="42" fill="#c62828"/>
+    <!-- boots -->
+    <rect x="28" y="122" width="24" height="14" fill="#37474f"/>
+    <rect x="60" y="122" width="24" height="14" fill="#37474f"/>
+  </svg>`,
+
+  mage: () => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 112 168" width="112" height="168">
+    <!-- hat brim -->
+    <rect x="21" y="19" width="70" height="7" fill="#4a148c"/>
+    <!-- hat cone -->
+    <rect x="35" y="7" width="42" height="13" fill="#6a1b9a"/>
+    <rect x="42" y="0" width="28" height="8" fill="#6a1b9a"/>
+    <!-- face -->
+    <rect x="35" y="26" width="42" height="19" fill="#ffcc80"/>
+    <!-- beard -->
+    <rect x="35" y="40" width="42" height="5" fill="#e0e0e0"/>
+    <!-- neck -->
+    <rect x="42" y="45" width="28" height="7" fill="#ffcc80"/>
+    <!-- robe body -->
+    <rect x="21" y="52" width="70" height="56" fill="#7b1fa2"/>
+    <!-- robe trim -->
+    <rect x="21" y="52" width="7" height="56" fill="#4a148c"/>
+    <rect x="84" y="52" width="7" height="56" fill="#4a148c"/>
+    <!-- star on chest -->
+    <rect x="49" y="66" width="14" height="14" fill="#e040fb"/>
+    <rect x="42" y="73" width="28" height="7" fill="#e040fb"/>
+    <rect x="56" y="59" width="7" height="28" fill="#e040fb"/>
+    <!-- left sleeve -->
+    <rect x="7" y="52" width="14" height="35" fill="#7b1fa2"/>
+    <!-- right sleeve holding staff -->
+    <rect x="91" y="52" width="14" height="35" fill="#7b1fa2"/>
+    <!-- staff -->
+    <rect x="101" y="0" width="7" height="112" fill="#8d6e63"/>
+    <!-- orb -->
+    <rect x="97" y="0" width="14" height="14" fill="#7c4dff"/>
+    <rect x="100" y="0" width="8" height="3" fill="#ea80fc"/>
+    <!-- robe bottom -->
+    <rect x="28" y="108" width="56" height="28" fill="#6a1b9a"/>
+    <!-- robe feet -->
+    <rect x="28" y="136" width="21" height="10" fill="#4a148c"/>
+    <rect x="63" y="136" width="21" height="10" fill="#4a148c"/>
+  </svg>`,
+
+  rogue: () => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 112 168" width="112" height="168">
+    <!-- hood outer -->
+    <rect x="28" y="7" width="56" height="38" fill="#212121"/>
+    <!-- hood shadow -->
+    <rect x="35" y="13" width="42" height="26" fill="#1a1a1a"/>
+    <!-- eyes (teal glow) -->
+    <rect x="37" y="26" width="10" height="6" fill="#00bcd4"/>
+    <rect x="65" y="26" width="10" height="6" fill="#00bcd4"/>
+    <!-- face partial -->
+    <rect x="35" y="32" width="42" height="8" fill="#546e7a"/>
+    <!-- neck -->
+    <rect x="42" y="45" width="28" height="7" fill="#37474f"/>
+    <!-- cloak body -->
+    <rect x="14" y="52" width="84" height="63" fill="#37474f"/>
+    <!-- cloak inner lining (teal accent) -->
+    <rect x="49" y="52" width="14" height="63" fill="#00838f"/>
+    <rect x="28" y="52" width="21" height="7" fill="#00838f"/>
+    <rect x="63" y="52" width="21" height="7" fill="#00838f"/>
+    <!-- dagger left -->
+    <rect x="7" y="66" width="7" height="35" fill="#b0bec5"/>
+    <rect x="3" y="80" width="14" height="5" fill="#90a4ae"/>
+    <rect x="7" y="101" width="7" height="7" fill="#78909c"/>
+    <!-- dagger right -->
+    <rect x="98" y="66" width="7" height="35" fill="#b0bec5"/>
+    <rect x="95" y="80" width="14" height="5" fill="#90a4ae"/>
+    <rect x="98" y="101" width="7" height="7" fill="#78909c"/>
+    <!-- legs -->
+    <rect x="28" y="115" width="21" height="35" fill="#263238"/>
+    <rect x="63" y="115" width="21" height="35" fill="#263238"/>
+    <!-- boots -->
+    <rect x="28" y="143" width="21" height="14" fill="#1a1a1a"/>
+    <rect x="63" y="143" width="21" height="14" fill="#1a1a1a"/>
+    <!-- teal boot trim -->
+    <rect x="28" y="143" width="21" height="3" fill="#00838f"/>
+    <rect x="63" y="143" width="21" height="3" fill="#00838f"/>
+  </svg>`,
+
+  cleric: () => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 112 168" width="112" height="168">
+    <!-- halo -->
+    <rect x="35" y="0" width="42" height="6" fill="#ffd700"/>
+    <rect x="28" y="3" width="56" height="3" fill="#ffe082"/>
+    <!-- cowl -->
+    <rect x="28" y="7" width="56" height="12" fill="#f5f5f5"/>
+    <!-- face -->
+    <rect x="35" y="19" width="42" height="20" fill="#ffcc80"/>
+    <!-- eyes (gentle) -->
+    <rect x="42" y="26" width="8" height="6" fill="#5d4037"/>
+    <rect x="62" y="26" width="8" height="6" fill="#5d4037"/>
+    <!-- neck -->
+    <rect x="42" y="39" width="28" height="7" fill="#ffcc80"/>
+    <!-- collar / cowl sides -->
+    <rect x="21" y="39" width="21" height="20" fill="#f5f5f5"/>
+    <rect x="70" y="39" width="21" height="20" fill="#f5f5f5"/>
+    <!-- robe body -->
+    <rect x="21" y="46" width="70" height="70" fill="#fafafa"/>
+    <!-- gold trim cross -->
+    <rect x="49" y="52" width="14" height="35" fill="#ffd700"/>
+    <rect x="35" y="63" width="42" height="14" fill="#ffd700"/>
+    <!-- inner white -->
+    <rect x="52" y="55" width="8" height="29" fill="#fff9c4"/>
+    <rect x="38" y="66" width="36" height="8" fill="#fff9c4"/>
+    <!-- sleeves -->
+    <rect x="7" y="46" width="14" height="42" fill="#f5f5f5"/>
+    <rect x="91" y="46" width="14" height="42" fill="#f5f5f5"/>
+    <!-- holy symbol (orb in hand) -->
+    <rect x="0" y="70" width="14" height="14" fill="#ffe082"/>
+    <rect x="3" y="73" width="8" height="8" fill="#ffd700"/>
+    <!-- robe skirt -->
+    <rect x="14" y="116" width="84" height="35" fill="#fafafa"/>
+    <!-- gold hem -->
+    <rect x="14" y="143" width="84" height="10" fill="#ffd700"/>
+  </svg>`,
+
+  ranger: () => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 112 168" width="112" height="168">
+    <!-- ranger cap -->
+    <rect x="35" y="7" width="42" height="13" fill="#33691e"/>
+    <rect x="21" y="19" width="70" height="6" fill="#33691e"/>
+    <!-- amber feather -->
+    <rect x="77" y="0" width="7" height="19" fill="#ff8f00"/>
+    <rect x="80" y="3" width="5" height="3" fill="#ffc107"/>
+    <!-- face -->
+    <rect x="35" y="25" width="42" height="19" fill="#ffcc80"/>
+    <!-- eyes -->
+    <rect x="42" y="32" width="8" height="6" fill="#4e342e"/>
+    <rect x="62" y="32" width="8" height="6" fill="#4e342e"/>
+    <!-- neck -->
+    <rect x="42" y="44" width="28" height="7" fill="#ffcc80"/>
+    <!-- leather vest -->
+    <rect x="28" y="51" width="56" height="49" fill="#5d4037"/>
+    <!-- green cloak -->
+    <rect x="14" y="51" width="14" height="63" fill="#558b2f"/>
+    <rect x="84" y="51" width="14" height="63" fill="#558b2f"/>
+    <!-- cloak details -->
+    <rect x="14" y="65" width="14" height="7" fill="#33691e"/>
+    <rect x="84" y="65" width="14" height="7" fill="#33691e"/>
+    <!-- belt -->
+    <rect x="28" y="93" width="56" height="7" fill="#4e342e"/>
+    <rect x="49" y="93" width="14" height="7" fill="#8d6e63"/>
+    <!-- bow (left side) -->
+    <rect x="0" y="7" width="7" height="112" fill="#6d4c41"/>
+    <rect x="0" y="13" width="3" height="7" fill="#5d4037"/>
+    <rect x="0" y="100" width="3" height="7" fill="#5d4037"/>
+    <!-- bowstring -->
+    <rect x="3" y="7" width="3" height="112" fill="#ffc107"/>
+    <!-- arrow nocked -->
+    <rect x="3" y="56" width="28" height="4" fill="#ffc107"/>
+    <rect x="28" y="54" width="7" height="7" fill="#ff8f00"/>
+    <!-- legs -->
+    <rect x="28" y="100" width="21" height="42" fill="#5d4037"/>
+    <rect x="63" y="100" width="21" height="42" fill="#5d4037"/>
+    <!-- boots -->
+    <rect x="28" y="136" width="21" height="14" fill="#4e342e"/>
+    <rect x="63" y="136" width="21" height="14" fill="#4e342e"/>
+    <!-- green boot cuffs -->
+    <rect x="28" y="136" width="21" height="5" fill="#33691e"/>
+    <rect x="63" y="136" width="21" height="5" fill="#33691e"/>
+  </svg>`,
+};
+
+function renderCharPortrait() {
+  const wrap = document.getElementById('char-portrait-wrap');
+  const figEl = document.getElementById('char-portrait-figure');
+  const svgEl = document.getElementById('char-portrait-svg');
+  const labelEl = document.getElementById('char-portrait-label');
+  if (!wrap || !svgEl || !labelEl) return;
+
+  const p = state.player;
+  if (!p || state.screen !== 'game') {
+    wrap.classList.add('hidden');
+    return;
+  }
+
+  const cls = CLASSES[p.player_class] || CLASSES.warrior;
+  const s = ps(p);
+  const sprFn = CHARACTER_SPRITES[p.player_class] || CHARACTER_SPRITES.warrior;
+  svgEl.innerHTML = sprFn();
+  labelEl.textContent = `${cls.name} · Lv ${s.level || 1}`;
+  wrap.classList.remove('hidden');
+
+  // Low HP pulse
+  if (figEl) {
+    if (s.health > 0 && s.max_health > 0 && (s.health / s.max_health) < 0.25) {
+      figEl.classList.add('char-low-hp');
+    } else {
+      figEl.classList.remove('char-low-hp');
+    }
+  }
+}
+
+function triggerCharAttack() {
+  const el = document.getElementById('char-portrait-figure');
+  if (!el) return;
+  el.classList.remove('char-hurt');
+  void el.offsetWidth;
+  el.classList.add('char-attack');
+  setTimeout(() => el.classList.remove('char-attack'), 420);
+}
+
+function triggerCharHurt() {
+  const el = document.getElementById('char-portrait-figure');
+  if (!el) return;
+  el.classList.remove('char-attack');
+  void el.offsetWidth;
+  el.classList.add('char-hurt');
+  setTimeout(() => el.classList.remove('char-hurt'), 640);
+}
+
 function renderGameUI() {
   renderStats();
   renderPhaseBanner();
@@ -1699,6 +1950,7 @@ function renderGameUI() {
   renderEnemies();
   renderGameParty();
   updateCompanionPanel();
+  renderCharPortrait();
   if (laMap && state.dungeon) laMap.render(state.dungeon);
   updateMapProgress();
 }
@@ -1710,9 +1962,10 @@ function renderStats() {
   const s = ps(p);
   const hpPct = pctOf(s.health, s.max_health);
   const mpPct = pctOf(s.mana, s.max_mana);
-  const xpNeed = [0,100,250,500,900,1400,2000,2700,3500,4500][s.level] || 999;
-  const xpPct = pctOf(s.xp || 0, xpNeed);
+  const xpNeed = [0,0,100,300,600,1000,1500,2100,2800,3600,4500][s.level] || 4500;
+  const xpPct = pctOf(s.experience || 0, xpNeed);
   const hpLow = hpPct < 25;
+  const mpRegen = (p.player_class === 'mage') ? 5 : 3;
 
   document.getElementById('stats-panel').innerHTML = `
     <div class="stats-header">
@@ -1727,11 +1980,11 @@ function renderStats() {
       <div class="bar-track"><div class="bar-fill bar-hp ${hpLow?'low':''}" style="width:${hpPct}%"></div></div>
     </div>
     <div class="bar-wrap">
-      <div class="bar-label"><span>💙 MP</span><span>${s.mana}/${s.max_mana}</span></div>
+      <div class="bar-label"><span>💙 MP <span class="regen-hint">+${mpRegen}/t</span></span><span>${s.mana}/${s.max_mana}</span></div>
       <div class="bar-track"><div class="bar-fill bar-mp" style="width:${mpPct}%"></div></div>
     </div>
     <div class="bar-wrap">
-      <div class="bar-label"><span>⭐ XP</span><span>${s.xp||0}/${xpNeed}</span></div>
+      <div class="bar-label"><span>⭐ XP</span><span>${s.experience||0}/${xpNeed}</span></div>
       <div class="bar-track" style="height:4px"><div class="bar-fill bar-xp" style="width:${xpPct}%"></div></div>
     </div>
     <div class="stats-grid">
@@ -1751,7 +2004,14 @@ function renderPhaseBanner() {
   _lastPhase = phase;
   banner.className = `phase-banner ${phase}`;
   const phaseLabel = PHASE_LABELS[phase] || phase.toUpperCase();
-  document.getElementById('phase-text').innerHTML = `<span class="phase-label">${phaseLabel}</span>`;
+  let turnIndicatorHtml = '';
+  if (phase === 'combat' && state.combat) {
+    const isPlayerTurn = state.combat.player_turn !== false;
+    const tLabel = isPlayerTurn ? '⚔️ YOUR TURN' : '💀 ENEMY TURN';
+    const tCls = isPlayerTurn ? 'player-turn' : 'enemy-turn';
+    turnIndicatorHtml = `<span class="turn-indicator ${tCls}">${tLabel}</span>`;
+  }
+  document.getElementById('phase-text').innerHTML = `<span class="phase-label">${phaseLabel}</span>${turnIndicatorHtml}`;
   document.getElementById('game-time').textContent = `Day ${state.gameDay} · ${String(state.gameHour).padStart(2,'0')}:00`;
   if (changed) {
     banner.classList.add('just-changed');
@@ -1776,7 +2036,7 @@ function renderActionBar() {
 
   if (phase === 'combat') {
     const p = state.player;
-    const skills = (p && p.skills) ? p.skills.slice(0, 3) : [];
+    const skills = (p && p.skills) ? p.skills : [];
     const hasPotion = p && p.inventory && p.inventory.some(i => (typeof i === 'string' ? i : i.name || '').includes('health_potion'));
 
     bar.innerHTML = `
@@ -1805,6 +2065,7 @@ function renderActionBar() {
       const canUse = !p || (ps(p).mana >= skill.mp && cdTurns === 0);
       const btn = document.createElement('button');
       btn.className = `skill-btn${cdTurns > 0 ? ' on-cooldown' : ''}`;
+      btn.dataset.cls = p.player_class || 'warrior';
       btn.disabled = !canUse;
       if (cdTurns > 0) {
         btn.innerHTML = `<span>${skill.emoji} ${skill.name}</span><span class="skill-cooldown-overlay">${cdTurns}</span>`;
@@ -2081,7 +2342,11 @@ function addLog(text, kind = 'narrative') {
   if (!el) return;
 
   const entry = document.createElement('div');
-  entry.className = `log-entry ${kind}`;
+  // Companion action log entries get special styling
+  const isCompanion = typeof text === 'string' && text.startsWith('[') &&
+    (text.includes('Bryn') || text.includes('Luma') || text.includes('Shade') ||
+     text.includes('Seraph') || text.includes('Fang'));
+  entry.className = `log-entry ${kind}${isCompanion ? ' companion-action' : ''}`;
   const now = new Date();
   const timeStr = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
   entry.innerHTML = `${renderMarkdown(text)}<span class="log-time">${timeStr}</span>`;
@@ -2657,7 +2922,12 @@ function setupHandlers() {
   // Combat updates
   ws.on('COMBAT_UPDATE', msg => {
     const payload = msg.payload || {};
+    const prevHp = state.player?.stats?.health ?? 999;
     applyStateUpdate(payload);
+    const newHp = state.player?.stats?.health ?? 999;
+    // Trigger character portrait animations
+    if (payload.xp_gained || payload.gold_gained) triggerCharAttack();
+    else if (newHp < prevHp) triggerCharHurt();
 
     // Fled successfully — server moved us to prev room, update scene + actions
     if (payload.phase === 'exploring' && payload.dungeon && payload.room) {
@@ -2671,6 +2941,7 @@ function setupHandlers() {
       renderPhaseBanner();
       renderActionBar();
       renderEnemies();
+      renderCharPortrait();
       if (laMap && state.dungeon) laMap.render(state.dungeon);
     }
 
