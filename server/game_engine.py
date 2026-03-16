@@ -57,6 +57,7 @@ from shared.constants import (
     EQUIPMENT_TEMPLATES,
     EQUIPMENT_RARITY_WEIGHTS,
     EQUIPMENT_DROP_BY_ROOM,
+    COMPANION_ACTIONS,
 )
 from server.connection_manager import ConnectionManager
 from server.ai_dungeon_master import AIDungeonMaster
@@ -932,6 +933,11 @@ class GameEngine:
 
         player = self._players.get(player_id)
 
+        # Mana restore on entering a non-combat room (exploration reward)
+        if new_phase == GamePhase.EXPLORING and player:
+            mp_restore = max(5, int(player.stats.max_mana * 0.10))
+            player.stats.mana = min(player.stats.max_mana, player.stats.mana + mp_restore)
+
         # NPC encounter: 20% chance when room has a game_role and no combat
         npc_encounter_payload = None
         if new_phase == GamePhase.EXPLORING and target_room.game_role and random.random() < 0.20:
@@ -1181,6 +1187,34 @@ class GameEngine:
             combat.player_shielded_turns -= 1
 
         self._tick_skill_cooldowns(combat)
+
+        # Companion auto-action (after enemy turn, if enemies still alive)
+        if combat.enemies:
+            companion = COMPANION_ACTIONS.get(player.player_class.value)
+            if companion:
+                target = next((e for e in combat.enemies if e.hp > 0), None)
+                if target:
+                    c_action = companion["action"]
+                    if c_action == "damage":
+                        dmg = max(1, int(player.stats.strength * companion["value"]))
+                        target.hp = max(0, target.hp - dmg)
+                        log.append(f"[{companion['emoji']} {companion['name']}] " +
+                                   companion["msg"].format(dmg=dmg))
+                    elif c_action == "heal":
+                        val = max(3, int(player.stats.max_health * companion["value"]))
+                        player.stats.health = min(player.stats.max_health, player.stats.health + val)
+                        log.append(f"[{companion['emoji']} {companion['name']}] " +
+                                   companion["msg"].format(v=val))
+                    elif c_action == "shield":
+                        combat.player_shielded_turns = max(combat.player_shielded_turns,
+                                                           companion["value"])
+                        log.append(f"[{companion['emoji']} {companion['name']}] " +
+                                   companion["msg"])
+
+        # Mana regen per combat turn
+        mp_regen = 5 if player.player_class.value == "mage" else 3
+        player.stats.mana = min(player.stats.max_mana, player.stats.mana + mp_regen)
+
         combat.player_turn = True
         combat.turn_number += 1
         combat.log.extend(log)
