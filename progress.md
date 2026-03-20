@@ -26,3 +26,12 @@ Original prompt: give me a github summary and then switch to working on this
   - `node --check web/js/bundle.js` passed
   - `make test` fails in this environment because the Makefile uses `python` instead of `python3`
   - `python3 test_setup.py` is blocked here because project deps like `pydantic` are not installed
+
+- Investigated "game start is bugged" flow.
+- Root cause 1: `startAdventure()` blocked `START_ADVENTURE` on optional IP geolocation and `/nearby-rooms` fetches, so bad network / slow Overpass made the Start button look dead for several seconds before any websocket message was sent.
+- Root cause 2: the start cinematic overlay was shown before the websocket response but only auto-dismissed on success or its 15s fallback, so rejected starts left the UI feeling stuck.
+- Fix:
+  - show the cinematic and disable the button immediately on click
+  - cap IP geolocation wait to 2.5s and POI prefetch to 4s, then fall back to classic dungeon instead of stalling start
+  - immediately clear pending state and dismiss the cinematic if the websocket send fails or the server returns `ERROR`
+- Updated `web/index.html` bundle cache version to `v=35`.
