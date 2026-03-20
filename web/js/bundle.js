@@ -3577,6 +3577,126 @@ function initLocationWidget() {
 }
 
 // ═══════════════════════════════════════════════════════
+// CINEMATIC LOADING SCREEN
+// ═══════════════════════════════════════════════════════
+
+(function initLoadingScreen() {
+  const TITLE = 'ANAGNORISIS';
+  const FLAVORS = [
+    'Awakening the old magic…',
+    'Weaving fate into the streets…',
+    'Consulting the oracle…',
+    'Charging the ley lines…',
+    'Summoning your destiny…',
+    'The dungeon stirs…',
+    'Binding runes to the map…',
+    'The veil grows thin…',
+  ];
+  const TOTAL_MS   = 3800; // ms before auto-dismiss
+  const BAR_START  = 2200; // ms when bar begins filling
+  const BAR_DUR    = 1400; // ms bar takes to reach 100%
+
+  // ── inject title letters ──
+  const titleEl = document.getElementById('lc-title');
+  if (titleEl) {
+    titleEl.innerHTML = TITLE.split('').map((ch, i) =>
+      `<span class="lc-letter" style="animation-delay:${1.6 + i * 0.07}s">${ch}</span>`
+    ).join('');
+  }
+
+  // ── ember canvas ──
+  const canvas = document.getElementById('lc-canvas');
+  if (canvas) {
+    const ctx = canvas.getContext('2d');
+    let W, H, embers = [];
+    function resize() {
+      W = canvas.width  = window.innerWidth;
+      H = canvas.height = window.innerHeight;
+    }
+    resize();
+    window.addEventListener('resize', resize);
+
+    function spawnEmber() {
+      return {
+        x: Math.random() * W,
+        y: H + 10,
+        vx: (Math.random() - 0.5) * 0.6,
+        vy: -(0.4 + Math.random() * 1.1),
+        life: 1,
+        decay: 0.004 + Math.random() * 0.006,
+        r: 1 + Math.random() * 2.2,
+        hue: 30 + Math.random() * 25,
+      };
+    }
+    for (let i = 0; i < 40; i++) {
+      const e = spawnEmber();
+      e.y = Math.random() * H;
+      embers.push(e);
+    }
+
+    let rafId;
+    function drawEmbers() {
+      ctx.clearRect(0, 0, W, H);
+      if (Math.random() < 0.35) embers.push(spawnEmber());
+      embers = embers.filter(e => e.life > 0);
+      embers.forEach(e => {
+        e.x  += e.vx + Math.sin(Date.now() * 0.001 + e.y * 0.01) * 0.15;
+        e.y  += e.vy;
+        e.life -= e.decay;
+        const alpha = Math.max(0, e.life * 0.85);
+        ctx.beginPath();
+        ctx.arc(e.x, e.y, e.r, 0, Math.PI * 2);
+        ctx.fillStyle = `hsla(${e.hue},90%,65%,${alpha})`;
+        ctx.fill();
+        // tiny glow
+        ctx.beginPath();
+        ctx.arc(e.x, e.y, e.r * 2.5, 0, Math.PI * 2);
+        ctx.fillStyle = `hsla(${e.hue},90%,65%,${alpha * 0.2})`;
+        ctx.fill();
+      });
+      rafId = requestAnimationFrame(drawEmbers);
+    }
+    drawEmbers();
+
+    // stop canvas when done
+    window._lcStopCanvas = () => cancelAnimationFrame(rafId);
+  }
+
+  // ── flavor text cycling ──
+  const flavorEl = document.getElementById('lc-flavor');
+  let flavorIdx = 0;
+  const flavorTimer = setInterval(() => {
+    if (!flavorEl) return;
+    flavorEl.classList.add('lc-flavor-fade');
+    setTimeout(() => {
+      flavorIdx = (flavorIdx + 1) % FLAVORS.length;
+      if (flavorEl) { flavorEl.textContent = FLAVORS[flavorIdx]; flavorEl.classList.remove('lc-flavor-fade'); }
+    }, 300);
+  }, 700);
+
+  // ── progress bar ──
+  const barEl = document.getElementById('lc-bar');
+  function tickBar(startTime) {
+    const pct = Math.min(100, ((Date.now() - startTime) / BAR_DUR) * 100);
+    if (barEl) barEl.style.width = pct + '%';
+    if (pct < 100) requestAnimationFrame(() => tickBar(startTime));
+  }
+  setTimeout(() => tickBar(Date.now()), BAR_START);
+
+  // ── dismiss ──
+  window._dismissLoadingScreen = function() {
+    clearInterval(flavorTimer);
+    if (window._lcStopCanvas) window._lcStopCanvas();
+    const screen = document.getElementById('loading-screen');
+    if (screen) {
+      screen.classList.add('lc-done');
+      setTimeout(() => { if (screen.parentNode) screen.parentNode.removeChild(screen); }, 950);
+    }
+  };
+  setTimeout(window._dismissLoadingScreen, TOTAL_MS);
+})();
+
+// ═══════════════════════════════════════════════════════
 // BOOT
 // ═══════════════════════════════════════════════════════
 
