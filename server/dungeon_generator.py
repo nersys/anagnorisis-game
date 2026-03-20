@@ -27,6 +27,33 @@ from shared.constants import (
     CLASS_STARTING_INVENTORY,
 )
 
+# Room type → possible ingredient drops
+_ROOM_INGREDIENT_POOL = {
+    "corridor":  ["cloth_strip", "bone_shard", "iron_ore"],
+    "chamber":   ["healing_herb", "cloth_strip", "bone_shard", "sulfur_chunk"],
+    "treasure":  ["healing_herb", "mana_crystal", "empty_vial", "red_mushroom"],
+    "boss":      ["mana_crystal", "empty_vial", "bone_shard", "red_mushroom"],
+    "start":     [],
+}
+
+def _ingredient_drops(room_type_str: str, count: int = 1) -> list:
+    """Randomly pick `count` ingredient items for a room."""
+    pool = _ROOM_INGREDIENT_POOL.get(room_type_str, [])
+    result = []
+    for _ in range(count):
+        if not pool:
+            break
+        key = random.choice(pool)
+        t = ITEM_TEMPLATES.get(key, {})
+        result.append(Item(
+            name=key,
+            description=t.get("description", ""),
+            emoji=t.get("emoji", "📦"),
+            item_type=ItemType.RESOURCE,
+            effect_value=0,
+        ))
+    return result
+
 
 def _make_enemy(template_key: str) -> Enemy:
     """Create an Enemy from a template."""
@@ -83,6 +110,7 @@ def generate_dungeon() -> dict[str, Room]:
         ),
         exits={},
         enemies=[_make_enemy("goblin"), _make_enemy("skeleton")],
+        items=_ingredient_drops("corridor"),
         gold=random.randint(5, 15),
     )
     rooms[r1.id] = r1
@@ -99,7 +127,7 @@ def generate_dungeon() -> dict[str, Room]:
         ),
         exits={},
         enemies=[_make_enemy("orc"), _make_enemy("goblin")],
-        items=[_make_item("health_potion")],
+        items=[_make_item("health_potion")] + _ingredient_drops("chamber"),
         gold=random.randint(15, 30),
     )
     rooms[r2.id] = r2
@@ -119,7 +147,7 @@ def generate_dungeon() -> dict[str, Room]:
             _make_item("health_potion"),
             _make_item("mana_potion"),
             _make_item("greater_health_potion"),
-        ],
+        ] + _ingredient_drops("treasure", 2),
         gold=random.randint(40, 70),
         cleared=True,  # No enemies
     )
@@ -137,6 +165,7 @@ def generate_dungeon() -> dict[str, Room]:
         ),
         exits={},
         enemies=[_make_enemy("troll"), _make_enemy("wraith")],
+        items=_ingredient_drops("chamber"),
         gold=random.randint(20, 40),
     )
     rooms[r4.id] = r4
@@ -153,7 +182,7 @@ def generate_dungeon() -> dict[str, Room]:
         ),
         exits={},
         enemies=[_make_enemy("skeleton"), _make_enemy("wraith")],
-        items=[_make_item("health_potion")],
+        items=[_make_item("health_potion")] + _ingredient_drops("corridor"),
         gold=random.randint(10, 25),
     )
     rooms[r5.id] = r5
@@ -175,7 +204,7 @@ def generate_dungeon() -> dict[str, Room]:
         items=[
             _make_item("greater_health_potion"),
             _make_item("mana_potion"),
-        ],
+        ] + _ingredient_drops("boss", 2),
         gold=random.randint(80, 150),
     )
     rooms[r6.id] = r6
@@ -325,6 +354,10 @@ def generate_dungeon_from_pois(
             items.append(_make_item("mana_potion"))
         if loot_tier >= 3:
             items.append(_make_item("greater_health_potion"))
+        # Add ingredient drops based on room type
+        rtype_str = "boss" if is_boss else room_type.value
+        ing_count = 2 if is_boss else (1 if loot_tier > 0 else 0)
+        items += _ingredient_drops(rtype_str, ing_count)
 
         # Gold
         gold_by_tier = {0: 0, 1: random.randint(5, 20), 2: random.randint(15, 40), 3: random.randint(40, 100)}

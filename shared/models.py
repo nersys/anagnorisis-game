@@ -70,8 +70,10 @@ class MessageType(str, Enum):
     LEVEL_UP_CHOICE = "level_up_choice"
     SKILL_CHOSEN = "skill_chosen"
 
-    # Equipment
+    # Equipment & Crafting
     EQUIP_ITEM = "equip_item"
+    CRAFT = "craft"
+    GIVE_ITEM = "give_item"
 
     # Boss phases
     BOSS_PHASE_2 = "boss_phase_2"

@@ -768,12 +768,90 @@ const SKILLS = {
 };
 
 const ITEM_EMOJIS = {
+  // consumables
   health_potion: '🧪', greater_health_potion: '💊', mana_potion: '🔵',
+  antidote: '💚', bandage: '🩹', smoke_bomb: '💨', bomb: '💣',
+  elixir_of_strength: '💪', elixir_of_swiftness: '💨',
+  // starting gear (key items)
   iron_sword: '⚔️', oak_staff: '🪄', twin_daggers: '🗡️', holy_mace: '🔨', longbow: '🏹',
   wooden_shield: '🛡️', spellbook: '📖', lockpicks: '🔑', prayer_beads: '📿', quiver: '🪄',
-  smoke_bomb: '💨', hunting_knife: '🔪', bandages: '🩹',
+  bandages: '🩹', hunting_knife: '🔪', smoke_bomb: '💨',
+  // ingredients
+  healing_herb: '🌿', mana_crystal: '💎', empty_vial: '🫙', toxic_mushroom: '🍄',
+  cloth_strip: '🧵', sulfur_chunk: '🪨', red_mushroom: '🍄‍🟫', spider_silk: '🕸️',
+  bone_shard: '🦴', iron_ore: '⛏️', wolf_pelt: '🐺',
+  // equipment
+  iron_sword_plus: '⚔️', oak_staff_plus: '🪄', worn_daggers: '🗡️',
+  shadow_blade: '🌑', veil_touched_bow: '🏹', holy_symbol_mace: '🔨', arcane_wand: '✨',
+  leather_vest: '🧥', chain_mail: '⛓️', shadowweave_cloak: '🌑',
+  arcane_robes: '👘', battle_plate: '🛡️',
+  veil_shard_ring: '💍', archivist_tome: '📖', blood_pendant: '🩸',
+  veil_blade: '🗡️', archivist_mantle: '🌌',
   default: '📦',
 };
+
+// Full item data for richer display (keyed by server item key)
+const ITEM_DATA = {
+  health_potion:         { name:'Health Potion',         type:'consumable', desc:'Restores 40 HP',                      rarity:'common'   },
+  greater_health_potion: { name:'Greater Health Potion', type:'consumable', desc:'Restores 80 HP',                      rarity:'uncommon' },
+  mana_potion:           { name:'Mana Potion',           type:'consumable', desc:'Restores 40 MP',                      rarity:'common'   },
+  antidote:              { name:'Antidote',              type:'consumable', desc:'Cures poison, +10 HP',                rarity:'common'   },
+  bandage:               { name:'Bandage',               type:'consumable', desc:'Restores 25 HP',                      rarity:'common'   },
+  elixir_of_strength:    { name:'Elixir of Strength',   type:'consumable', desc:'+4 STR for 3 combat turns',           rarity:'uncommon' },
+  elixir_of_swiftness:   { name:'Elixir of Swiftness',  type:'consumable', desc:'+4 DEX for 3 combat turns',           rarity:'uncommon' },
+  bomb:                  { name:'Bomb',                  type:'consumable', desc:'30 fire damage to enemy',             rarity:'uncommon' },
+  smoke_bomb:            { name:'Smoke Bomb',            type:'consumable', desc:'Guarantees escape from combat',       rarity:'uncommon' },
+  healing_herb:          { name:'Healing Herb',          type:'ingredient', desc:'Medicinal herb with restorative properties' },
+  mana_crystal:          { name:'Mana Crystal',          type:'ingredient', desc:'Shard pulsing with arcane energy'    },
+  empty_vial:            { name:'Empty Vial',            type:'ingredient', desc:'Clean glass vial ready for a brew'   },
+  toxic_mushroom:        { name:'Toxic Mushroom',        type:'ingredient', desc:'Blue-capped, dripping with venom'    },
+  cloth_strip:           { name:'Cloth Strip',           type:'ingredient', desc:'Torn from fallen enemies'            },
+  sulfur_chunk:          { name:'Sulfur Chunk',          type:'ingredient', desc:'Volatile when mixed right'           },
+  red_mushroom:          { name:'Red Mushroom',          type:'ingredient', desc:'Raw power in fungal form'            },
+  spider_silk:           { name:'Spider Silk',           type:'ingredient', desc:'Incredibly tough thread'             },
+  bone_shard:            { name:'Bone Shard',            type:'ingredient', desc:'Sharp fragment from fallen undead'   },
+  iron_ore:              { name:'Iron Ore',              type:'ingredient', desc:'Raw iron, surprisingly heavy'        },
+  wolf_pelt:             { name:'Wolf Pelt',             type:'ingredient', desc:'Rough hide from a shadow wolf'       },
+  // equipment
+  iron_sword_plus:    { name:'Iron Sword +1',      type:'weapon',  rarity:'common',    desc:'+3 damage' },
+  oak_staff_plus:     { name:'Enchanted Staff',    type:'weapon',  rarity:'common',    desc:'+2 arcane, +1 INT' },
+  worn_daggers:       { name:'Worn Daggers',        type:'weapon',  rarity:'common',    desc:'+2 damage, +1 DEX' },
+  shadow_blade:       { name:'Shadow Blade',        type:'weapon',  rarity:'uncommon',  desc:'+5 shadow, +2 DEX (Rogue)' },
+  veil_touched_bow:   { name:'Veil-Touched Bow',   type:'weapon',  rarity:'uncommon',  desc:'+4 nature, +2 DEX (Ranger)' },
+  holy_symbol_mace:   { name:'Blessed Mace',        type:'weapon',  rarity:'uncommon',  desc:'+4 holy, +2 INT (Cleric)' },
+  arcane_wand:        { name:'Arcane Wand',          type:'weapon',  rarity:'uncommon',  desc:'+3 arcane, +3 INT, +15 MP (Mage)' },
+  leather_vest:       { name:'Leather Vest',         type:'armor',   rarity:'common',    desc:'+2 defense' },
+  chain_mail:         { name:'Chain Mail',           type:'armor',   rarity:'common',    desc:'+4 defense, +10 max HP' },
+  shadowweave_cloak:  { name:'Shadowweave Cloak',   type:'armor',   rarity:'uncommon',  desc:'+3 defense, +2 DEX, +15 HP' },
+  arcane_robes:       { name:'Arcane Robes',         type:'armor',   rarity:'uncommon',  desc:'+1 defense, +2 INT, +25 MP' },
+  battle_plate:       { name:'Battle Plate',         type:'armor',   rarity:'uncommon',  desc:'+6 defense, +20 HP (Warrior)' },
+  veil_shard_ring:    { name:'Veil Shard Ring',      type:'accessory', rarity:'rare',    desc:'+3 INT, +20 MP, +10 HP' },
+  archivist_tome:     { name:'Tome Fragment',        type:'accessory', rarity:'rare',    desc:'+4 INT, +2 STR' },
+  blood_pendant:      { name:"Warrior's Pendant",    type:'accessory', rarity:'rare',    desc:'+4 STR, +25 HP (Warrior)' },
+  veil_blade:         { name:'The Veil Blade',       type:'weapon',  rarity:'legendary', desc:'+10 shadow, +4 STR, +4 DEX' },
+  archivist_mantle:   { name:"Archivist's Mantle",   type:'armor',   rarity:'legendary', desc:'+8 defense, +5 INT, +40 MP, +30 HP' },
+};
+
+// Crafting recipes (mirrors server CRAFT_RECIPES)
+const CRAFT_RECIPES_CLIENT = {
+  health_potion:         { result: 'health_potion',         ingredients: ['healing_herb','empty_vial'] },
+  greater_health_potion: { result: 'greater_health_potion', ingredients: ['health_potion','healing_herb','healing_herb'] },
+  mana_potion:           { result: 'mana_potion',           ingredients: ['mana_crystal','empty_vial'] },
+  antidote:              { result: 'antidote',              ingredients: ['toxic_mushroom','healing_herb'] },
+  bandage:               { result: 'bandage',               ingredients: ['cloth_strip','cloth_strip'] },
+  bomb:                  { result: 'bomb',                  ingredients: ['sulfur_chunk','cloth_strip'] },
+  smoke_bomb:            { result: 'smoke_bomb',            ingredients: ['sulfur_chunk','cloth_strip','cloth_strip'] },
+  elixir_of_strength:    { result: 'elixir_of_strength',    ingredients: ['red_mushroom','empty_vial','bone_shard'] },
+  elixir_of_swiftness:   { result: 'elixir_of_swiftness',   ingredients: ['spider_silk','empty_vial','mana_crystal'] },
+};
+
+// Equipment template keys (for equip button logic)
+const EQUIP_KEYS = new Set([
+  'iron_sword_plus','oak_staff_plus','worn_daggers',
+  'shadow_blade','veil_touched_bow','holy_symbol_mace','arcane_wand',
+  'leather_vest','chain_mail','shadowweave_cloak','arcane_robes','battle_plate',
+  'veil_shard_ring','archivist_tome','blood_pendant','veil_blade','archivist_mantle',
+]);
 
 const PHASE_LABELS = {
   exploring: '🧭 EXPLORING',
@@ -3041,30 +3119,157 @@ function expandImage(url, caption) {
 function openInventory() {
   const p = state.player;
   if (!p) return;
+  document.getElementById('inventory-modal').classList.remove('hidden');
+  _renderInvTab('items');
 
-  const items = p.inventory || [];
-  const skills = p.skills || [];
+  // Tab switching
+  document.querySelectorAll('.inv-tab').forEach(btn => {
+    btn.onclick = () => _renderInvTab(btn.dataset.tab);
+  });
+}
 
-  document.getElementById('inventory-items').innerHTML = items.length
-    ? items.map(item => {
-        const name = typeof item === 'string' ? item : item.name;
-        const desc = typeof item === 'object' ? item.description : '';
-        const emoji = ITEM_EMOJIS[name] || ITEM_EMOJIS.default;
-        const isConsumable = name.includes('potion') || name.includes('bandage');
-        return `<div class="item-row">
-          <span class="item-emoji">${emoji}</span>
-          <div class="item-info">
-            <div class="item-name">${formatName(name)}</div>
-            ${desc ? `<div class="item-desc">${desc}</div>` : ''}
-          </div>
-          ${isConsumable && state.phase !== 'combat' ?
-            `<button class="btn btn-ghost btn-sm use-item-btn" data-item="${name}">Use</button>` : ''}
-        </div>`;
-      }).join('')
-    : '<div class="empty-state">No items</div>';
+function _renderInvTab(tab) {
+  document.querySelectorAll('.inv-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  document.querySelectorAll('.inv-pane').forEach(p => p.classList.add('hidden'));
+  document.getElementById(`inv-pane-${tab}`)?.classList.remove('hidden');
 
+  if (tab === 'items')   _renderInvItems();
+  if (tab === 'craft')   _renderInvCraft();
+  if (tab === 'skills')  _renderInvSkills();
+}
+
+function _renderInvItems() {
+  const p = state.player;
+  const stats = ps(p) || {};
+  const equipped = stats.equipped || {};
+  const inv = p ? (p.inventory || []) : [];
+  const inCombat = state.phase === 'combat';
+  const party = state.party;
+  const partyMembers = party ? (party.member_ids || []).filter(id => id !== state.playerId) : [];
+
+  // Equipped slots
+  const slotsHtml = ['weapon', 'armor', 'accessory'].map(slot => {
+    const key = equipped[slot];
+    const d = key ? (ITEM_DATA[key] || {}) : null;
+    const emoji = key ? (ITEM_EMOJIS[key] || '📦') : '';
+    const rarityColor = d && d.rarity ? EQUIPMENT_RARITIES[d.rarity]?.color || '#aaa' : '#aaa';
+    return `<div class="equip-slot">
+      <span class="equip-slot-label">${slot.toUpperCase()}</span>
+      ${key
+        ? `<span class="equip-slot-item equipped" style="color:${rarityColor}">${emoji} ${d?.name || formatName(key)}</span>`
+        : `<span class="equip-slot-item empty">— none —</span>`}
+    </div>`;
+  }).join('');
+  document.getElementById('inv-equipped-slots').innerHTML =
+    `<div class="inv-section-title">Equipped</div>${slotsHtml}`;
+
+  // Inventory list
+  if (!inv.length) {
+    document.getElementById('inventory-items').innerHTML = '<div class="empty-state">Empty backpack</div>';
+    return;
+  }
+
+  const html = inv.map((key, idx) => {
+    const d = ITEM_DATA[key] || {};
+    const emoji = ITEM_EMOJIS[key] || '📦';
+    const name = d.name || formatName(key);
+    const desc = d.desc || '';
+    const type = d.type || 'key';
+    const rarity = d.rarity || '';
+    const rarityColor = rarity ? EQUIPMENT_RARITIES[rarity]?.color || '#aaa' : null;
+    const rarityBadge = rarity ? `<span class="inv-rarity-badge" style="color:${rarityColor}">${rarity}</span>` : '';
+    const typeBadge = `<span class="inv-type-badge inv-type-${type}">${type}</span>`;
+
+    const isConsumable = type === 'consumable';
+    const isEquipment = EQUIP_KEYS.has(key);
+    const isIngredient = type === 'ingredient';
+
+    let actions = '';
+    if (isConsumable && !inCombat) {
+      actions += `<button class="inv-btn inv-btn-use" data-item="${key}" data-idx="${idx}">Use</button>`;
+    }
+    if (isEquipment) {
+      actions += `<button class="inv-btn inv-btn-equip" data-item="${key}">Equip</button>`;
+    }
+    if (partyMembers.length > 0 && !isIngredient) {
+      actions += `<button class="inv-btn inv-btn-give" data-item="${key}">Give</button>`;
+    }
+
+    return `<div class="inv-item-row">
+      <span class="inv-item-emoji">${emoji}</span>
+      <div class="inv-item-details">
+        <div class="inv-item-top">${name}${rarityBadge}${typeBadge}</div>
+        ${desc ? `<div class="inv-item-desc">${desc}</div>` : ''}
+      </div>
+      <div class="inv-item-actions">${actions}</div>
+    </div>`;
+  }).join('');
+  document.getElementById('inventory-items').innerHTML = html;
+
+  // Bind actions
+  document.querySelectorAll('.inv-btn-use').forEach(btn => {
+    btn.addEventListener('click', () => {
+      ws.send('USE_ITEM', { item_name: btn.dataset.item });
+      closeInventory();
+    });
+  });
+  document.querySelectorAll('.inv-btn-equip').forEach(btn => {
+    btn.addEventListener('click', () => {
+      ws.send('EQUIP_ITEM', { item_key: btn.dataset.item });
+      closeInventory();
+    });
+  });
+  document.querySelectorAll('.inv-btn-give').forEach(btn => {
+    btn.addEventListener('click', () => _showGiveItemDialog(btn.dataset.item, partyMembers));
+  });
+}
+
+function _renderInvCraft() {
+  const inv = state.player ? (state.player.inventory || []) : [];
+  const html = Object.entries(CRAFT_RECIPES_CLIENT).map(([key, recipe]) => {
+    const resultData = ITEM_DATA[key] || {};
+    const emoji = ITEM_EMOJIS[key] || '📦';
+    const name = resultData.name || formatName(key);
+    const desc = resultData.desc || '';
+    // Count ingredients available
+    const invCopy = [...inv];
+    let canCraft = true;
+    const ingHtml = recipe.ingredients.map(ing => {
+      const idx = invCopy.indexOf(ing);
+      const have = idx !== -1;
+      if (have) invCopy.splice(idx, 1);
+      else canCraft = false;
+      const ingD = ITEM_DATA[ing] || {};
+      const ingEmoji = ITEM_EMOJIS[ing] || '📦';
+      return `<span class="craft-ing ${have ? 'have' : 'missing'}" title="${ingD.desc || ''}">${ingEmoji} ${ingD.name || formatName(ing)}</span>`;
+    }).join(' + ');
+
+    return `<div class="craft-recipe ${canCraft ? 'craftable' : ''}">
+      <div class="craft-result">
+        <span class="craft-result-emoji">${emoji}</span>
+        <div class="craft-result-info">
+          <div class="craft-result-name">${name}</div>
+          <div class="craft-result-desc">${desc}</div>
+        </div>
+        <button class="inv-btn inv-btn-craft${canCraft ? '' : ' disabled'}" data-recipe="${key}" ${canCraft ? '' : 'disabled'}>CRAFT</button>
+      </div>
+      <div class="craft-ingredients">Needs: ${ingHtml}</div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('inventory-crafting').innerHTML = html || '<div class="empty-state">No recipes</div>';
+  document.querySelectorAll('.inv-btn-craft:not(.disabled)').forEach(btn => {
+    btn.addEventListener('click', () => {
+      ws.send('CRAFT', { recipe: btn.dataset.recipe });
+      closeInventory();
+    });
+  });
+}
+
+function _renderInvSkills() {
+  const skills = state.player ? (state.player.skills || []) : [];
   document.getElementById('inventory-skills').innerHTML = skills.map(key => {
-    const skill = SKILLS[key] || { name: key, emoji: '✨', mp: 0, desc: '' };
+    const skill = SKILLS[key] || { name: formatName(key), emoji: '✨', mp: 0, desc: '' };
     return `<div class="skill-card">
       <div class="skill-header">
         <span class="skill-emoji">${skill.emoji}</span>
@@ -3073,17 +3278,42 @@ function openInventory() {
       </div>
       <div class="skill-desc">${skill.desc}</div>
     </div>`;
+  }).join('') || '<div class="empty-state">No skills yet</div>';
+}
+
+function _showGiveItemDialog(itemKey, memberIds) {
+  const d = ITEM_DATA[itemKey] || {};
+  const itemName = d.name || formatName(itemKey);
+  const partyStats = state.partyMembersStats || {};
+
+  const opts = memberIds.map(pid => {
+    const m = partyStats[pid];
+    const mname = m ? m.name : pid.slice(0, 8);
+    return `<button class="give-member-btn btn btn-ghost" data-pid="${pid}">${mname}</button>`;
   }).join('');
 
-  // Bind use-item buttons
-  document.querySelectorAll('.use-item-btn').forEach(btn => {
+  const dlg = document.createElement('div');
+  dlg.className = 'modal-overlay give-dialog';
+  dlg.innerHTML = `
+    <div class="modal card" style="max-width:320px">
+      <div class="modal-header">
+        <h2>Give ${ITEM_EMOJIS[itemKey] || '📦'} ${itemName}</h2>
+        <button class="modal-close" id="give-dlg-close">✕</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px">Choose a party member:</p>
+        <div style="display:flex;flex-direction:column;gap:8px">${opts}</div>
+      </div>
+    </div>`;
+  document.body.appendChild(dlg);
+  dlg.querySelector('#give-dlg-close').addEventListener('click', () => dlg.remove());
+  dlg.querySelectorAll('.give-member-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-      ws.send('USE_ITEM', { item_name: btn.dataset.item });
+      ws.send('GIVE_ITEM', { item_key: itemKey, target_player_id: btn.dataset.pid });
+      dlg.remove();
       closeInventory();
     });
   });
-
-  document.getElementById('inventory-modal').classList.remove('hidden');
 }
 
 function closeInventory() {
@@ -3253,11 +3483,18 @@ function setupHandlers() {
   ws.on('COMBAT_UPDATE', msg => {
     const payload = msg.payload || {};
     const prevHp = state.player?.stats?.health ?? 999;
+    const prevActivePid = state.combat?.active_player_id;
     applyStateUpdate(payload);
     const newHp = state.player?.stats?.health ?? 999;
+    const newActivePid = state.combat?.active_player_id;
     // Trigger character portrait animations
     if (payload.xp_gained || payload.gold_gained) triggerCharAttack();
     else if (newHp < prevHp) triggerCharHurt();
+
+    // Show "YOUR TURN" burst when active player changes to us
+    if (newActivePid && newActivePid === state.playerId && prevActivePid !== state.playerId) {
+      showYourTurnBurst();
+    }
 
     // Fled successfully — server moved us to prev room, update scene + actions
     if (payload.phase === 'exploring' && payload.dungeon && payload.room) {
@@ -3286,13 +3523,18 @@ function setupHandlers() {
 
     // Damage numbers (animate near enemies)
     if (payload.damage_dealt) {
-      const enemyEl = document.querySelector('.enemy-card');
+      const enemyEl = document.querySelector('.enemy-card:not(.enemy-dead)') || document.querySelector('.enemy-card');
       if (enemyEl) {
         const rect = enemyEl.getBoundingClientRect();
         showDamageNumber(payload.damage_dealt, rect.left + rect.width/2, rect.top + 20, 'damage');
         enemyEl.classList.add('hit-flash');
-        setTimeout(() => enemyEl.classList.remove('hit-flash'), 400);
+        enemyEl.classList.add('enemy-shake');
+        setTimeout(() => {
+          enemyEl.classList.remove('hit-flash');
+          enemyEl.classList.remove('enemy-shake');
+        }, 500);
       }
+      flashEnemyCard('#c44b4b');
     }
     if (payload.damage_taken) {
       const statsEl = document.getElementById('stats-panel');
@@ -3593,6 +3835,12 @@ function setupHandlers() {
       if (payload.narrative) typewriterLog(payload.narrative, 'narrative');
       addLog(`🗡️ The adventure begins! Use the arrow buttons to explore.`, 'system');
       startEmbers();
+    } else if (event === 'item_received') {
+      if (payload.inventory) { if (state.player) state.player.inventory = payload.inventory; }
+      if (payload.player_stats) { if (state.player) state.player.stats = payload.player_stats; }
+      addLog(`📦 ${payload.from_name} gave you ${payload.item_emoji || ''} ${payload.item_name}!`, 'loot');
+      renderStats();
+      renderInventoryPanel();
     } else if (event === 'player_joined') {
       addLog(`👤 ${data.player_name || 'A hero'} joined the party!`, 'system');
     } else if (event === 'player_left') {
@@ -3665,6 +3913,21 @@ function setupHandlers() {
       if (payload.inventory && state.player) state.player.inventory = payload.inventory;
       addLog(`🔧 ${payload.message}`, 'loot');
       if (state.screen === 'game') { renderStats(); renderInventoryPanel(); }
+    }
+    // Item crafted
+    if (payload.crafted_item) {
+      if (payload.player_stats && state.player) state.player.stats = payload.player_stats;
+      if (payload.inventory && state.player) state.player.inventory = payload.inventory;
+      const craftEmoji = ITEM_EMOJIS[payload.crafted_item] || '📦';
+      addLog(`⚗️ ${payload.message}`, 'loot');
+      if (state.screen === 'game') { renderStats(); renderInventoryPanel(); }
+    }
+    // Item given
+    if (payload.message && payload.inventory && !payload.item_key && !payload.crafted_item) {
+      if (payload.player_stats && state.player) state.player.stats = payload.player_stats;
+      if (payload.inventory && state.player) state.player.inventory = payload.inventory;
+      addLog(`🤝 ${payload.message}`, 'system');
+      if (state.screen === 'game') renderInventoryPanel();
     }
   });
 
@@ -4023,6 +4286,27 @@ function shakeScreen() {
   setTimeout(() => center.classList.remove('shake'), 420);
 }
 
+// ── "YOUR TURN" burst ──
+function showYourTurnBurst() {
+  const el = document.createElement('div');
+  el.className = 'your-turn-burst';
+  el.innerHTML = `<span>⚔️ YOUR TURN</span>`;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 1200);
+}
+
+// ── Skill use flash on enemy ──
+function flashEnemyCard(color = '#c9a84c') {
+  const card = document.querySelector('.enemy-card:not(.enemy-dead)');
+  if (!card) return;
+  card.style.boxShadow = `0 0 24px 6px ${color}`;
+  card.style.transform = 'scale(1.04)';
+  setTimeout(() => {
+    card.style.boxShadow = '';
+    card.style.transform = '';
+  }, 320);
+}
+
 // ── Level-up overlay ──
 function triggerLevelUp(newLevel) {
   const overlay = document.createElement('div');
@@ -4324,49 +4608,16 @@ function getEquipTemplate(itemKey) {
 }
 
 function renderInventoryPanel() {
-  // Only update if the inventory modal is open
+  // Re-render the currently active tab if modal is open
   const modal = document.getElementById('inventory-modal');
-  if (!modal || !modal.style.display || modal.style.display === 'none') return;
-  // Re-render the modal contents
-  renderInventoryModal(modal);
+  if (!modal || modal.classList.contains('hidden')) return;
+  const activeTab = document.querySelector('.inv-tab.active');
+  if (activeTab) _renderInvTab(activeTab.dataset.tab);
 }
 
-function renderInventoryModal(modal) {
-  const p = state.player;
-  if (!p) { modal.innerHTML = '<div style="color:#666">No player</div>'; return; }
-  const stats = ps(p);
-  const equipped = (stats && stats.equipped) || {};
-  const inv = p.inventory || [];
-
-  // Equipped slots section
-  const slotsHtml = ['weapon', 'armor', 'accessory'].map(slot => {
-    const itemKey = equipped[slot];
-    const label = itemKey ? itemKey.replace(/_/g,' ') : '—';
-    return `<div class="equip-slot">
-      <span class="equip-slot-label">${slot.toUpperCase()}</span>
-      <span class="equip-slot-item ${itemKey ? 'equipped' : 'empty'}">${itemKey ? '🔸 ' + label : 'none'}</span>
-    </div>`;
-  }).join('');
-
-  // Inventory items
-  const itemsHtml = inv.length === 0 ? '<div class="empty-state">Empty</div>' : inv.map(itemKey => {
-    const isEquip = getEquipTemplate(itemKey);
-    const emoji = ITEM_EMOJIS[itemKey] || ITEM_EMOJIS.default || '📦';
-    const name = formatName(itemKey);
-    const equipBtn = isEquip ? `<button class="btn-equip" data-item="${itemKey}">Equip</button>` : '';
-    return `<div class="inv-item-row"><span class="inv-item-emoji">${emoji}</span><span class="inv-item-name">${name}</span>${equipBtn}</div>`;
-  }).join('');
-
-  modal.innerHTML = `
-    <div class="inv-equipped-section"><div class="inv-section-title">Equipped</div>${slotsHtml}</div>
-    <div class="inv-section-title" style="margin-top:14px">Inventory</div>
-    ${itemsHtml}
-  `;
-  modal.querySelectorAll('.btn-equip').forEach(btn => {
-    btn.addEventListener('click', () => {
-      ws.send('EQUIP_ITEM', { item_key: btn.dataset.item });
-    });
-  });
+// Legacy compat (may be called elsewhere)
+function getEquipTemplate(itemKey) {
+  return EQUIP_KEYS.has(itemKey) ? { isEquipment: true } : null;
 }
 
 // ══════════════════════════════════════════════════════════════

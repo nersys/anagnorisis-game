@@ -1454,6 +1454,32 @@ html, body {
   60%  { opacity:1; transform:scale(1.01); }
   100% { opacity:0; transform:scale(1.14); }
 }
+/* ── YOUR TURN burst ── */
+@keyframes your-turn-burst {
+  0%   { opacity:0; transform:translateY(20px) scale(0.8); }
+  20%  { opacity:1; transform:translateY(0) scale(1.05); }
+  75%  { opacity:1; transform:translateY(0) scale(1); }
+  100% { opacity:0; transform:translateY(-16px) scale(0.9); }
+}
+.your-turn-burst {
+  position:fixed; top:42%; left:50%; transform:translateX(-50%);
+  z-index:99500; pointer-events:none;
+  font-family:var(--font-deco); font-size:clamp(22px,5vw,38px);
+  color:var(--gold2); letter-spacing:5px; text-transform:uppercase;
+  text-shadow:0 0 30px rgba(240,204,106,0.9),0 0 60px rgba(201,168,76,0.5);
+  animation:your-turn-burst 1.2s ease forwards;
+}
+
+/* ── Enemy card shake on hit ── */
+@keyframes enemy-shake-kf {
+  0%,100% { transform:translateX(0); }
+  20%     { transform:translateX(-8px); }
+  40%     { transform:translateX(8px); }
+  60%     { transform:translateX(-5px); }
+  80%     { transform:translateX(5px); }
+}
+.enemy-shake { animation:enemy-shake-kf 0.45s ease; }
+
 .level-up-overlay {
   position:fixed; inset:0; z-index:99000; pointer-events:none;
   display:flex; align-items:center; justify-content:center; flex-direction:column; gap:12px;
@@ -1737,17 +1763,91 @@ html, body {
 .ra-greeting { font-family:var(--font-title); font-size:14px; color:var(--gold2); margin-bottom:4px; }
 .ra-last { font-size:12px; color:var(--text-muted); }
 
+/* ── Inventory Modal (wide) ── */
+.inv-modal-wide { width: min(600px, 96vw); max-height: 88vh; display:flex; flex-direction:column; }
+.inv-modal-wide .modal-body { flex:1; overflow-y:auto; padding-top:8px; }
+
+/* Tabs */
+.inv-tab-bar { display:flex; border-bottom:1px solid var(--border); gap:0; padding:0 16px; }
+.inv-tab {
+  background:none; border:none; padding:8px 16px; font-size:12px; text-transform:uppercase;
+  letter-spacing:0.1em; color:var(--text-muted); cursor:pointer; border-bottom:2px solid transparent;
+  margin-bottom:-1px; transition:color 0.15s, border-color 0.15s;
+}
+.inv-tab.active { color:var(--amber); border-bottom-color:var(--amber); }
+.inv-tab:hover:not(.active) { color:var(--text); }
+.inv-pane { display:block; }
+.inv-pane.hidden { display:none; }
+
 /* ── Equipment UI in Inventory ── */
-.inv-equipped-section { margin-bottom:12px; }
+.inv-equipped-slots { margin-bottom:6px; }
 .inv-section-title { font-size:10px; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.12em; margin-bottom:6px; }
 .equip-slot { display:flex; align-items:center; gap:8px; padding:5px 0; border-bottom:1px solid var(--border); }
 .equip-slot-label { font-size:10px; color:var(--text-muted); width:70px; text-transform:uppercase; }
 .equip-slot-item { font-size:12px; }
 .equip-slot-item.equipped { color:var(--amber); }
 .equip-slot-item.empty { color:var(--border2); }
-.inv-item-row { display:flex; align-items:center; gap:8px; padding:5px 0; border-bottom:1px solid var(--border); }
-.inv-item-emoji { font-size:16px; }
-.inv-item-name { flex:1; font-size:13px; }
+
+/* Inventory item rows */
+.inv-item-row {
+  display:flex; align-items:center; gap:10px; padding:7px 0;
+  border-bottom:1px solid var(--border); transition:background 0.1s;
+}
+.inv-item-row:hover { background:rgba(255,255,255,0.03); }
+.inv-item-emoji { font-size:20px; flex-shrink:0; width:28px; text-align:center; }
+.inv-item-details { flex:1; min-width:0; }
+.inv-item-top { display:flex; align-items:center; gap:6px; flex-wrap:wrap; font-size:13px; font-weight:600; }
+.inv-item-desc { font-size:11px; color:var(--text-muted); margin-top:2px; }
+.inv-item-actions { display:flex; gap:5px; flex-shrink:0; }
+.inv-rarity-badge { font-size:9px; text-transform:uppercase; letter-spacing:0.08em; }
+.inv-type-badge {
+  font-size:9px; text-transform:uppercase; padding:1px 5px; border-radius:4px;
+  letter-spacing:0.06em;
+}
+.inv-type-consumable { background:rgba(201,168,76,0.18); color:var(--amber); }
+.inv-type-ingredient { background:rgba(67,160,71,0.18); color:#66bb6a; }
+.inv-type-weapon, .inv-type-armor, .inv-type-accessory { background:rgba(124,77,255,0.18); color:#b39ddb; }
+.inv-type-key { background:rgba(100,100,100,0.2); color:#888; }
+
+/* Item action buttons */
+.inv-btn {
+  font-size:10px; padding:3px 9px; border-radius:5px; cursor:pointer;
+  border:1px solid; font-family:var(--font-title); text-transform:uppercase; letter-spacing:0.05em;
+  transition:background 0.15s;
+}
+.inv-btn-use   { border-color:var(--amber); color:var(--amber); background:transparent; }
+.inv-btn-use:hover { background:rgba(201,168,76,0.15); }
+.inv-btn-equip { border-color:#b39ddb; color:#b39ddb; background:transparent; }
+.inv-btn-equip:hover { background:rgba(124,77,255,0.12); }
+.inv-btn-give  { border-color:#66bb6a; color:#66bb6a; background:transparent; }
+.inv-btn-give:hover { background:rgba(67,160,71,0.12); }
+.inv-btn-craft { border-color:var(--amber); color:var(--amber); background:transparent; }
+.inv-btn-craft:not(.disabled):hover { background:rgba(201,168,76,0.15); }
+.inv-btn-craft.disabled { opacity:0.35; cursor:not-allowed; }
+
+/* ── Crafting panel ── */
+.inv-craft-hint { font-size:11px; color:var(--text-muted); margin-bottom:12px; }
+.crafting-list { display:flex; flex-direction:column; gap:10px; }
+.craft-recipe {
+  border:1px solid var(--border); border-radius:8px; padding:10px 12px;
+  transition:border-color 0.2s;
+}
+.craft-recipe.craftable { border-color:rgba(201,168,76,0.35); }
+.craft-result { display:flex; align-items:center; gap:10px; }
+.craft-result-emoji { font-size:22px; flex-shrink:0; }
+.craft-result-info { flex:1; min-width:0; }
+.craft-result-name { font-size:13px; font-weight:700; }
+.craft-result-desc { font-size:11px; color:var(--text-muted); margin-top:2px; }
+.craft-ingredients { margin-top:8px; font-size:11px; display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+.craft-ing { padding:2px 7px; border-radius:4px; font-size:11px; }
+.craft-ing.have { background:rgba(67,160,71,0.18); color:#66bb6a; }
+.craft-ing.missing { background:rgba(180,50,50,0.18); color:#ef5350; text-decoration:line-through; }
+
+/* ── Give item dialog ── */
+.give-dialog { z-index:1400; }
+.give-member-btn { width:100%; justify-content:flex-start; font-size:14px; }
+
+/* ── Legacy compat ── */
 .btn-equip {
   font-size:11px; padding:3px 10px; border:1px solid var(--amber); border-radius:6px;
   background:transparent; color:var(--amber); cursor:pointer;
