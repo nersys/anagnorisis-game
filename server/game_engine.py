@@ -1007,11 +1007,16 @@ class GameEngine:
 
         if living_enemies:
             new_phase = GamePhase.COMBAT
+            # Shuffle turn order so each fight feels different
+            shuffled_members = list(member_ids)
+            random.shuffle(shuffled_members)
             shared_combat = CombatState(
                 enemies=living_enemies,
                 player_turn=True,
                 turn_number=1,
                 log=[f"You enter {target_room.name}... enemies appear!"],
+                turn_order=shuffled_members,
+                current_turn_idx=0,
             )
             # Share the SAME CombatState and phase with all party members
             for pid in member_ids:
@@ -1136,6 +1141,22 @@ class GameEngine:
         log: list[str] = []
         skill_name = message.payload.get("skill_name", "")
 
+        party = self._get_party_for_player(player_id)
+        member_ids = list(party.member_ids) if party else [player_id]
+
+        # ── Turn order enforcement ──────────────────────────────────────────
+        # If a turn_order is set (party combat), only the active player may act.
+        if combat.turn_order:
+            active_idx = combat.current_turn_idx % len(combat.turn_order)
+            active_pid = combat.turn_order[active_idx]
+            if player_id != active_pid:
+                active_player_obj = self._players.get(active_pid)
+                whose = active_player_obj.name if active_player_obj else "another player"
+                return GameMessage(
+                    type=MessageType.ERROR,
+                    payload={"error": f"It's {whose}'s turn — wait for them to act!"}
+                )
+
         # --- Player turn ---
         if combat.player_turn:
             # Process status effects at start of each turn
@@ -1144,10 +1165,11 @@ class GameEngine:
             if player.stats.health <= 0:
                 log.append("You succumb to your wounds! Game over.")
                 self._player_phase[player_id] = GamePhase.GAME_OVER
+                if player_id in (combat.turn_order or []):
+                    combat.turn_order.remove(player_id)
                 death_narrative = "Your light fades..."
                 try:
                     if self._dm:
-                        dungeon = self._player_dungeons.get(player_id)
                         adventure = next(
                             (self._adventures.get(p.current_adventure_id)
                              for p in self._parties.values() if player_id in p.member_ids
@@ -1176,9 +1198,16 @@ class GameEngine:
             if action == "flee":
                 success = random.random() < 0.6
                 if success:
-                    log.append("You successfully flee the battle!")
+                    log.append(f"{player.name} successfully flees the battle!")
                     self._player_phase[player_id] = GamePhase.EXPLORING
-                    del self._player_combat[player_id]
+                    if player_id in self._player_combat:
+                        del self._player_combat[player_id]
+                    # Remove fleeing player from turn order
+                    if player_id in (combat.turn_order or []):
+                        idx = combat.turn_order.index(player_id)
+                        combat.turn_order.remove(player_id)
+                        if combat.current_turn_idx > idx:
+                            combat.current_turn_idx = max(0, combat.current_turn_idx - 1)
                     # Move player back to previous room so they're not stuck
                     if dungeon.prev_room_id and dungeon.prev_room_id in dungeon.rooms:
                         dungeon.current_room_id = dungeon.prev_room_id
@@ -1197,22 +1226,47 @@ class GameEngine:
                             "room": flee_room.model_dump() if flee_room else None,
                         }
                     ))
+                    # Notify remaining party members of flee
+                    remaining = [pid for pid in member_ids if pid != player_id]
+                    if remaining:
+                        combat_dict = _combat_to_dict(combat)
+                        pms = self._build_party_members_stats(party.id) if party else []
+                        for pid in remaining:
+                            pmember = self._players.get(pid)
+                            cid = self._player_connection_id(pid)
+                            if cid:
+                                await manager.send_to(cid, GameMessage(
+                                    type=MessageType.COMBAT_UPDATE,
+                                    payload={
+                                        "log": log,
+                                        "phase": GamePhase.COMBAT.value,
+                                        "player_stats": pmember.stats.model_dump() if pmember else {},
+                                        "combat": combat_dict,
+                                        "party_members_stats": pms,
+                                    }
+                                ))
                     return None
                 else:
-                    log.append("You try to flee but the enemies block your path!")
+                    log.append(f"{player.name} tries to flee but the enemies block the path!")
 
             elif action == "attack":
                 dmg, msg, _dtype = self._calc_player_attack(player, combat, bonus_mult=1.0)
                 self._apply_damage_to_enemy(combat, 0, dmg)
+                if len(member_ids) > 1:
+                    msg = f"[{player.name}] {msg}"
                 log.append(msg)
 
             elif action == "skill" and skill_name:
                 result_log = self._apply_skill(player, combat, skill_name)
+                if len(member_ids) > 1:
+                    result_log = [f"[{player.name}] {l}" for l in result_log]
                 log.extend(result_log)
 
             elif action == "use_item":
                 item_id = message.payload.get("item_id", "")
                 result_log = self._use_item_in_combat(player, item_id)
+                if len(member_ids) > 1:
+                    result_log = [f"[{player.name}] {l}" for l in result_log]
                 log.extend(result_log)
 
             # Remove dead enemies
@@ -1237,52 +1291,123 @@ class GameEngine:
                     connection_id, player_id, player, combat, dungeon, manager, log
                 )
 
+            # ── Advance party turn order ───────────────────────────────────
+            if combat.turn_order:
+                combat.current_turn_idx += 1
+                all_acted = combat.current_turn_idx >= len(combat.turn_order)
+
+                if not all_acted:
+                    # Not everyone has gone yet — broadcast interim state and wait
+                    next_pid = combat.turn_order[combat.current_turn_idx]
+                    next_player_obj = self._players.get(next_pid)
+                    next_name = next_player_obj.name if next_player_obj else "next adventurer"
+                    log.append(f"⚔️ {next_name}'s turn!")
+                    combat.log.extend(log)
+                    combat_dict = _combat_to_dict(combat)
+                    pms = self._build_party_members_stats(party.id) if party else []
+                    for pid in member_ids:
+                        pmember = self._players.get(pid)
+                        cid = self._player_connection_id(pid)
+                        if cid:
+                            await manager.send_to(cid, GameMessage(
+                                type=MessageType.COMBAT_UPDATE,
+                                payload={
+                                    "log": log,
+                                    "phase": GamePhase.COMBAT.value,
+                                    "player_stats": pmember.stats.model_dump() if pmember else {},
+                                    "combat": combat_dict,
+                                    "party_members_stats": pms,
+                                }
+                            ))
+                    return None
+                # else: fall through to enemy turn below, then reset idx
+
             # Enemy turn
             combat.player_turn = False
 
-        # --- Enemy turn(s) ---
+        # --- Enemy turn(s): attack EACH living party member ---
+        # First pass: resolve stun (once, not once-per-player)
+        attacking_enemies = []
         for enemy in combat.enemies:
             if enemy.stunned:
                 log.append(f"{enemy.name} is stunned and cannot act!")
                 enemy.stunned = False
+            else:
+                attacking_enemies.append(enemy)
+
+        # Second pass: deal damage to each party member
+        dead_this_round: list[str] = []
+        for pid in member_ids:
+            pmember = self._players.get(pid)
+            if not pmember or pmember.stats.health <= 0:
                 continue
+            for enemy in attacking_enemies:
+                dmg, msg = self._calc_enemy_attack(enemy, pmember, combat)
+                if len(member_ids) > 1:
+                    log.append(f"[{pmember.name}] {msg}")
+                else:
+                    log.append(msg)
+                pmember.stats.health = max(0, pmember.stats.health - dmg)
+                if pmember.stats.health <= 0:
+                    dead_this_round.append(pid)
+                    break  # no need to apply more attacks once dead
 
-            dmg, msg = self._calc_enemy_attack(enemy, player, combat)
-            log.append(msg)
-            player.stats.health = max(0, player.stats.health - dmg)
-
-            if player.stats.health <= 0:
-                log.append(f"You have been slain by {enemy.name}! Game over.")
-                self._player_phase[player_id] = GamePhase.GAME_OVER
-                death_narrative = "Your light fades..."
-                try:
-                    if self._dm:
-                        adventure = next(
-                            (self._adventures.get(p.current_adventure_id)
-                             for p in self._parties.values() if player_id in p.member_ids
-                             and p.current_adventure_id), None)
-                        if adventure:
-                            adventure.turns_played += combat.turn_number
-                        stats = {
-                            "rooms_cleared": dungeon.rooms_cleared,
-                            "enemies_slain": adventure.enemies_slain if adventure else 0,
-                            "gold_found": dungeon.gold_collected,
-                            "turns_played": adventure.turns_played if adventure else 0,
-                        }
-                        death_narrative = await self._dm.generate_death_narrative(player, adventure, stats)
-                except Exception:
-                    pass
-                await manager.send_to(connection_id, GameMessage(
+        # Handle deaths
+        for dead_pid in dead_this_round:
+            dead_player = self._players.get(dead_pid)
+            dead_name = dead_player.name if dead_player else "An adventurer"
+            if dead_pid == player_id:
+                log.append(f"You have been slain! Game over.")
+            else:
+                log.append(f"{dead_name} has fallen in battle!")
+            self._player_phase[dead_pid] = GamePhase.GAME_OVER
+            if dead_pid in self._player_combat:
+                del self._player_combat[dead_pid]
+            if dead_pid in (combat.turn_order or []):
+                idx = combat.turn_order.index(dead_pid)
+                combat.turn_order.remove(dead_pid)
+                if combat.current_turn_idx > idx:
+                    combat.current_turn_idx = max(0, combat.current_turn_idx - 1)
+            # Generate death narrative and send game_over to dead player
+            death_narrative = "Your light fades..."
+            try:
+                if self._dm and dead_player:
+                    adventure = next(
+                        (self._adventures.get(p.current_adventure_id)
+                         for p in self._parties.values() if dead_pid in p.member_ids
+                         and p.current_adventure_id), None)
+                    if adventure:
+                        adventure.turns_played += combat.turn_number
+                    stats = {
+                        "rooms_cleared": dungeon.rooms_cleared,
+                        "enemies_slain": adventure.enemies_slain if adventure else 0,
+                        "gold_found": dungeon.gold_collected,
+                        "turns_played": adventure.turns_played if adventure else 0,
+                    }
+                    death_narrative = await self._dm.generate_death_narrative(dead_player, adventure, stats)
+            except Exception:
+                pass
+            dead_cid = self._player_connection_id(dead_pid)
+            if dead_cid:
+                await manager.send_to(dead_cid, GameMessage(
                     type=MessageType.COMBAT_UPDATE,
                     payload={
                         "log": log,
                         "phase": GamePhase.GAME_OVER.value,
-                        "player_stats": player.stats.model_dump(),
+                        "player_stats": dead_player.stats.model_dump() if dead_player else {},
                         "combat": _combat_to_dict(combat),
                         "death_narrative": death_narrative,
                     }
                 ))
-                return None
+
+        # If the acting player died, we're done for them
+        if player_id in dead_this_round:
+            return None
+
+        # Update member_ids to only living combatants
+        member_ids = [pid for pid in member_ids if pid not in dead_this_round]
+        if not member_ids:
+            return None
 
         # Decrement buff timers
         if combat.player_buffed_turns > 0:
@@ -1295,7 +1420,7 @@ class GameEngine:
 
         self._tick_skill_cooldowns(combat)
 
-        # Companion auto-action (after enemy turn, if enemies still alive)
+        # Companion auto-action (once per round, keyed to acting player's class)
         if combat.enemies:
             companion = COMPANION_ACTIONS.get(player.player_class.value)
             if companion:
@@ -1318,18 +1443,22 @@ class GameEngine:
                         log.append(f"[{companion['emoji']} {companion['name']}] " +
                                    companion["msg"])
 
-        # Mana regen per combat turn
-        mp_regen = 5 if player.player_class.value == "mage" else 3
-        player.stats.mana = min(player.stats.max_mana, player.stats.mana + mp_regen)
+        # Mana regen for each surviving party member
+        for pid in member_ids:
+            pmember = self._players.get(pid)
+            if pmember:
+                mp_regen = 5 if pmember.player_class.value == "mage" else 3
+                pmember.stats.mana = min(pmember.stats.max_mana, pmember.stats.mana + mp_regen)
 
         combat.player_turn = True
+        # Reset turn index and bump round counter after enemies attack
+        if combat.turn_order:
+            combat.current_turn_idx = 0
         combat.turn_number += 1
         combat.log.extend(log)
 
-        # Broadcast combat state to ALL party members (each sees their own player_stats)
+        # Broadcast combat state to ALL surviving party members
         combat_dict = _combat_to_dict(combat)
-        party = self._get_party_for_player(player_id)
-        member_ids = party.member_ids if party else [player_id]
         party_members_stats = self._build_party_members_stats(party.id) if party else []
         for pid in member_ids:
             pmember = self._players.get(pid)
@@ -2113,6 +2242,9 @@ def _dungeon_to_dict(dungeon: DungeonState) -> dict:
 
 def _combat_to_dict(combat: CombatState) -> dict:
     """Serialize CombatState to a JSON-safe dict."""
+    active_player_id = None
+    if combat.turn_order:
+        active_player_id = combat.turn_order[combat.current_turn_idx % len(combat.turn_order)]
     return {
         "enemies": [e.model_dump(mode="json") for e in combat.enemies],
         "player_turn": combat.player_turn,
@@ -2124,4 +2256,6 @@ def _combat_to_dict(combat: CombatState) -> dict:
         "skill_cooldowns": dict(combat.skill_cooldowns),
         "player_status_effects": list(combat.player_status_effects),
         "enemy_status_effects": {k: list(v) for k, v in combat.enemy_status_effects.items()},
+        "turn_order": list(combat.turn_order),
+        "active_player_id": active_player_id,
     }

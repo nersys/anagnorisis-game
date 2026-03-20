@@ -356,3 +356,7 @@ class CombatState(BaseModel):
     player_status_effects: list[dict] = Field(default_factory=list)
     # Status effects on enemies: enemy_id -> list of effects
     enemy_status_effects: dict[str, list] = Field(default_factory=dict)
+    # Party turn order: list of player_ids; empty = solo (legacy behaviour)
+    turn_order: list[str] = Field(default_factory=list)
+    # Index into turn_order for whose action we're waiting on
+    current_turn_idx: int = 0
