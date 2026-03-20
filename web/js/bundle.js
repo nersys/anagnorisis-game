@@ -871,6 +871,7 @@ let laMap = null;
 let selectedClass = 'warrior';
 let selectedMode = 'guided';
 let selectedDifficulty = 'normal';
+let isStartingAdventure = false;
 let currentRoomData = null;
 let sceneImageSeed = 1;
 let sceneImageEnabled = true;  // user can disable scene art generation
@@ -1405,8 +1406,12 @@ function leaveParty() {
 }
 
 async function startAdventure() {
+  if (isStartingAdventure) return;
   const name = document.getElementById('input-adventure-name').value.trim() || 'Into the Depths';
   let pos = getPosition();
+
+  setAdventureStartPending(true);
+  showAdventureStartCinematic(name);
 
   // Build payload — fetch nearby POIs if we have a position
   const payload = {
@@ -1419,12 +1424,16 @@ async function startAdventure() {
   // Always try to get location — from GPS, manual position, or IP geolocation
   if (!pos) {
     // No GPS — try IP geolocation as last resort
-    const ip = await getIPGeolocation();
-    if (ip) {
-      setManualPosition(ip.lat, ip.lng);
-      enableSimulateTravel();
-      pos = { lat: ip.lat, lng: ip.lng, accuracy: 5000 };
-      console.log('[Adventure] Falling back to IP geolocation:', ip);
+    try {
+      const ip = await promiseWithTimeout(getIPGeolocation(), 2500, 'IP geolocation');
+      if (ip) {
+        setManualPosition(ip.lat, ip.lng);
+        enableSimulateTravel();
+        pos = { lat: ip.lat, lng: ip.lng, accuracy: 5000 };
+        console.log('[Adventure] Falling back to IP geolocation:', ip);
+      }
+    } catch (e) {
+      console.warn('[Adventure] IP geolocation timed out:', e.message);
     }
   }
 
@@ -1439,7 +1448,7 @@ async function startAdventure() {
     // Fetch nearby POIs to seed the dungeon from real-world places
     try {
       console.log(`[Adventure] Fetching POIs near ${pos.lat.toFixed(4)}, ${pos.lng.toFixed(4)}...`);
-      const r = await fetch(`/nearby-rooms?lat=${pos.lat}&lng=${pos.lng}&radius=800`);
+      const r = await fetchWithTimeout(`/nearby-rooms?lat=${pos.lat}&lng=${pos.lng}&radius=800`, {}, 4000);
       if (r.ok) {
         const data = await r.json();
         payload.pois = (data.pois || []).slice(0, 12);
@@ -1454,8 +1463,47 @@ async function startAdventure() {
     console.warn('[Adventure] No location available — using classic dungeon');
   }
 
-  showAdventureStartCinematic(name);
-  ws.send('START_ADVENTURE', payload);
+  if (!ws.send('START_ADVENTURE', payload)) {
+    setAdventureStartPending(false);
+    if (window._dismissAdventureCinematic) window._dismissAdventureCinematic();
+    lobbyToast('Connection lost. Reconnect and try again.');
+  }
+}
+
+function setAdventureStartPending(pending) {
+  isStartingAdventure = pending;
+  const btn = document.getElementById('btn-start-adventure');
+  if (!btn) return;
+  btn.disabled = pending;
+  btn.innerHTML = pending
+    ? '<span>Preparing Adventure</span> <span>⌛</span>'
+    : '<span>Begin Adventure</span> <span>🐉</span>';
+}
+
+function promiseWithTimeout(promise, timeoutMs, label = 'request') {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs);
+    Promise.resolve(promise).then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
+async function fetchWithTimeout(url, options, timeoutMs) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 // ── Cinematic overlay shown while the server generates the dungeon ──
@@ -3382,6 +3430,7 @@ function setupHandlers() {
   // Initial welcome (connection established)
   ws.on('SUCCESS', msg => {
     const payload = msg.payload || {};
+    if (payload.adventure_id) setAdventureStartPending(false);
 
     // Login response
     if (payload.player) {
@@ -3845,6 +3894,7 @@ function setupHandlers() {
     const data = payload.data || payload;
 
     if (event === 'adventure_started') {
+      setAdventureStartPending(false);
       // Show game state immediately — cinematic (if any) plays on top
       if (payload.dungeon) {
         state.dungeon = payload.dungeon;
@@ -3926,6 +3976,10 @@ function setupHandlers() {
   ws.on('ERROR', msg => {
     const payload = msg.payload || {};
     const errText = payload.error || payload.message || 'Unknown error';
+    if (isStartingAdventure) {
+      setAdventureStartPending(false);
+      if (window._dismissAdventureCinematic) window._dismissAdventureCinematic();
+    }
     if (state.screen === 'login') {
       showLoginError(errText);
       setLoginStatus('');
