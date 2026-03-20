@@ -950,6 +950,7 @@ function renderExploreToolbar() {
   const toolbar = document.getElementById('explore-toolbar');
   if (!toolbar) return;
   const phase = state.phase || 'exploring';
+  toolbar.classList.toggle('player-turn-active', isPlayersTurn() && phase !== 'combat');
 
   if (phase === 'combat') {
     toolbar.style.display = 'none';
@@ -987,6 +988,32 @@ function renderExploreToolbar() {
       sendPlayerInput(actions[btn.dataset.action] || btn.dataset.action);
     });
   });
+}
+
+function isPlayersTurn() {
+  const phase = state.phase || 'exploring';
+  if (phase === 'combat') {
+    const activePid = state.combat && state.combat.active_player_id;
+    return !activePid || activePid === state.playerId;
+  }
+  const activePid = state.exploreActivePid;
+  return !activePid || activePid === state.playerId;
+}
+
+function updatePlayerInputState() {
+  const row = document.getElementById('player-input-row');
+  const input = document.getElementById('player-action-input');
+  const sendBtn = document.getElementById('btn-player-action-send');
+  if (!row || !input || !sendBtn) return;
+
+  const myTurn = isPlayersTurn();
+  row.classList.toggle('player-turn-active', myTurn);
+  row.classList.toggle('turn-locked', !myTurn);
+  input.disabled = !myTurn;
+  sendBtn.disabled = !myTurn;
+  input.placeholder = myTurn
+    ? 'What do you do? (type freely or use buttons above...)'
+    : 'Wait for your turn...';
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1505,6 +1532,7 @@ function invalidateMapSize() {
 
 function sendPlayerAction() {
   const input = document.getElementById('player-action-input');
+  if (!isPlayersTurn()) return;
   const text = input.value.trim();
   if (!text) return;
   const phase = state.phase || 'exploring';
@@ -1519,6 +1547,7 @@ function sendPlayerAction() {
 }
 
 function sendPlayerInput(text) {
+  if (!isPlayersTurn()) return;
   if (!text) return;
   ws.send('PLAYER_ACTION', { action: text });
   addLog(`▶ ${text}`, 'player-action');
@@ -2272,6 +2301,7 @@ function renderActionBar() {
   renderExploreToolbar();
   const bar = document.getElementById('action-bar');
   const phase = state.phase || 'exploring';
+  bar.classList.toggle('player-turn-active', isPlayersTurn());
 
   if (phase === 'victory' || phase === 'game_over') {
     bar.innerHTML = `
@@ -2280,6 +2310,7 @@ function renderActionBar() {
       </button>
     `;
     document.getElementById('btn-return-lobby').addEventListener('click', returnToLobby);
+    updatePlayerInputState();
     return;
   }
 
@@ -2307,6 +2338,7 @@ function renderActionBar() {
           </div>
         </div>
       `;
+      updatePlayerInputState();
       return;
     }
 
@@ -2366,6 +2398,7 @@ function renderActionBar() {
         skillContainer.appendChild(potBtn);
       }
     }
+    updatePlayerInputState();
     return;
   }
 
@@ -2394,6 +2427,7 @@ function renderActionBar() {
   if (phase === 'looting') {
     if (!isMyExploreTurn) {
       bar.innerHTML = exploreWaitingHtml();
+      updatePlayerInputState();
       return;
     }
     bar.innerHTML = `
@@ -2405,12 +2439,14 @@ function renderActionBar() {
     });
     // Also show direction buttons for already-cleared rooms
     renderDirectionButtons(bar, true);
+    updatePlayerInputState();
     return;
   }
 
   // Exploring (default) — direction buttons + contextual actions
   if (!isMyExploreTurn) {
     bar.innerHTML = exploreWaitingHtml();
+    updatePlayerInputState();
     return;
   }
 
@@ -2426,6 +2462,7 @@ function renderActionBar() {
   // Load contextual actions for current room
   const curRoom = state.dungeon && state.dungeon.rooms && state.dungeon.rooms[state.dungeon.current_room_id];
   if (curRoom) loadContextualActions(curRoom);
+  updatePlayerInputState();
 }
 
 function renderDirectionButtons(container, append) {
@@ -2619,6 +2656,7 @@ function renderContextualActions(actions) {
     btn.innerHTML = `${a.icon || '✨'} ${a.label}`;
     btn.title = a.action || a.label;
     btn.addEventListener('click', () => {
+      if (!isPlayersTurn()) return;
       // Send the action as a free-form player action
       ws.send('PLAYER_ACTION', { action: a.action, label: a.label });
       addLog(`You ${a.action}.`, 'narrative');
@@ -3341,6 +3379,7 @@ function setupHandlers() {
   // AI DM narrative
   ws.on('DM_RESPONSE', msg => {
     const payload = msg.payload || {};
+    applyStateUpdate(payload);
     const text = payload.narrative || payload.response || payload.text || '';
     // Show roll summary inline before narrative if present
     if (payload.roll_summary) addLog(payload.roll_summary, 'roll');
@@ -3362,6 +3401,11 @@ function setupHandlers() {
     if (phase === 'exploring') {
       const curRoom = state.dungeon && state.dungeon.rooms && state.dungeon.rooms[state.dungeon.current_room_id];
       if (curRoom) loadContextualActions(curRoom, text);
+    }
+    if (state.screen === 'game') {
+      renderPhaseBanner();
+      renderActionBar();
+      renderGameParty();
     }
   });
 

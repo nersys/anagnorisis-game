@@ -358,13 +358,14 @@ class CombatState(BaseModel):
     player_turn: bool = True
     turn_number: int = 0
     log: list[str] = Field(default_factory=list)
-    player_buffed_turns: int = 0    # Turns of active buff (e.g. Battle Cry)
-    player_shielded_turns: int = 0  # Turns of active shield
-    player_stealth: bool = False    # Rogue stealth - next hit does 2x damage
-    # Skill cooldowns: skill_name -> turns remaining
-    skill_cooldowns: dict[str, int] = Field(default_factory=dict)
-    # Status effects on player: list of {"type": str, "turns": int, ...}
-    player_status_effects: list[dict] = Field(default_factory=list)
+    # Per-player combat timers and flags for shared party combat.
+    player_buff_turns: dict[str, int] = Field(default_factory=dict)
+    player_shield_turns: dict[str, int] = Field(default_factory=dict)
+    player_stealth_flags: dict[str, bool] = Field(default_factory=dict)
+    # Per-player skill cooldowns: player_id -> {skill_name -> turns remaining}
+    skill_cooldowns_by_player: dict[str, dict[str, int]] = Field(default_factory=dict)
+    # Per-player status effects: player_id -> list of {"type": str, "turns": int, ...}
+    player_status_by_player: dict[str, list[dict]] = Field(default_factory=dict)
     # Status effects on enemies: enemy_id -> list of effects
     enemy_status_effects: dict[str, list] = Field(default_factory=dict)
     # Party turn order: list of player_ids; empty = solo (legacy behaviour)
