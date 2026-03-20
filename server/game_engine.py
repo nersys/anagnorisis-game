@@ -2262,6 +2262,20 @@ class GameEngine:
 
         self._advance_explore_turn(party)
         explore_turn = self._explore_turn_payload(party)
+        party_members_stats = self._build_party_members_stats(party.id) if party else []
+        if party:
+            await manager.broadcast_to_party(
+                party.id,
+                GameMessage(
+                    type=MessageType.STATE_UPDATE,
+                    payload={
+                        "dungeon": _dungeon_to_dict(dungeon),
+                        "party_members_stats": party_members_stats,
+                        **explore_turn,
+                    },
+                ),
+                exclude=connection_id,
+            )
         return GameMessage(
             type=MessageType.SUCCESS,
             payload={
@@ -2271,6 +2285,7 @@ class GameEngine:
                 "player_stats": player.stats.model_dump(),
                 "inventory": player.inventory,
                 "dungeon": _dungeon_to_dict(dungeon),
+                "party_members_stats": party_members_stats,
                 **explore_turn,
             }
         )
@@ -2379,6 +2394,19 @@ class GameEngine:
 
         self._advance_explore_turn(party)
         explore_turn = self._explore_turn_payload(party)
+        party_members_stats = self._build_party_members_stats(party.id) if party else []
+        if party:
+            await manager.broadcast_to_party(
+                party.id,
+                GameMessage(
+                    type=MessageType.STATE_UPDATE,
+                    payload={
+                        "party_members_stats": party_members_stats,
+                        **explore_turn,
+                    },
+                ),
+                exclude=connection_id,
+            )
         return GameMessage(
             type=MessageType.SUCCESS,
             payload={
@@ -2389,6 +2417,7 @@ class GameEngine:
                 "mp_gained": mp_gained,
                 "gold_spent": svc["cost"],
                 "player_stats": player.stats.model_dump(),
+                "party_members_stats": party_members_stats,
                 **explore_turn,
             }
         )
