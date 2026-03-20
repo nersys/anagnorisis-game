@@ -372,41 +372,166 @@ ENEMY_TEMPLATES = {
 # ============================================
 
 ITEM_TEMPLATES = {
+    # ── Consumables ──────────────────────────────────────
     "health_potion": {
         "name": "Health Potion",
-        "item_type": "consumable",
+        "item_type": "consumable", "effect_type": "heal_hp",
         "description": "Restores 40 HP",
-        "effect_value": 40,
-        "emoji": "🧪",
+        "effect_value": 40, "emoji": "🧪",
     },
     "greater_health_potion": {
         "name": "Greater Health Potion",
-        "item_type": "consumable",
+        "item_type": "consumable", "effect_type": "heal_hp",
         "description": "Restores 80 HP",
-        "effect_value": 80,
-        "emoji": "💊",
+        "effect_value": 80, "emoji": "💊",
     },
     "mana_potion": {
         "name": "Mana Potion",
-        "item_type": "consumable",
+        "item_type": "consumable", "effect_type": "heal_mp",
         "description": "Restores 40 MP",
-        "effect_value": 40,
-        "emoji": "🔵",
+        "effect_value": 40, "emoji": "🔵",
     },
     "antidote": {
         "name": "Antidote",
-        "item_type": "consumable",
+        "item_type": "consumable", "effect_type": "cure_poison",
         "description": "Cures poison, restores 10 HP",
-        "effect_value": 10,
-        "emoji": "💚",
+        "effect_value": 10, "emoji": "💚",
     },
+    "bandage": {
+        "name": "Bandage",
+        "item_type": "consumable", "effect_type": "heal_hp",
+        "description": "Roughly applied — restores 25 HP",
+        "effect_value": 25, "emoji": "🩹",
+    },
+    "elixir_of_strength": {
+        "name": "Elixir of Strength",
+        "item_type": "consumable", "effect_type": "buff_str",
+        "description": "+4 STR for the next 3 combat turns",
+        "effect_value": 4, "emoji": "💪",
+    },
+    "elixir_of_swiftness": {
+        "name": "Elixir of Swiftness",
+        "item_type": "consumable", "effect_type": "buff_dex",
+        "description": "+4 DEX for the next 3 combat turns",
+        "effect_value": 4, "emoji": "💨",
+    },
+    "bomb": {
+        "name": "Bomb",
+        "item_type": "consumable", "effect_type": "damage_enemy",
+        "description": "Lob at an enemy — deals 30 fire damage",
+        "effect_value": 30, "emoji": "💣",
+    },
+    "smoke_bomb": {
+        "name": "Smoke Bomb",
+        "item_type": "consumable", "effect_type": "flee",
+        "description": "Guarantees escape from combat",
+        "effect_value": 0, "emoji": "💨",
+    },
+    # ── Key Items ─────────────────────────────────────────
     "gold_coin": {
         "name": "Gold Coins",
         "item_type": "key",
         "description": "Shiny gold coins",
-        "effect_value": 50,
-        "emoji": "🪙",
+        "effect_value": 50, "emoji": "🪙",
     },
+    # ── Crafting Ingredients ─────────────────────────────
+    "healing_herb": {
+        "name": "Healing Herb",
+        "item_type": "ingredient",
+        "description": "A fragrant green herb with restorative properties",
+        "effect_value": 0, "emoji": "🌿",
+    },
+    "mana_crystal": {
+        "name": "Mana Crystal",
+        "item_type": "ingredient",
+        "description": "A shard pulsing with arcane energy",
+        "effect_value": 0, "emoji": "💎",
+    },
+    "empty_vial": {
+        "name": "Empty Vial",
+        "item_type": "ingredient",
+        "description": "A clean glass vial, ready for a brew",
+        "effect_value": 0, "emoji": "🫙",
+    },
+    "toxic_mushroom": {
+        "name": "Toxic Mushroom",
+        "item_type": "ingredient",
+        "description": "A blue-capped mushroom dripping with venom",
+        "effect_value": 0, "emoji": "🍄",
+    },
+    "cloth_strip": {
+        "name": "Cloth Strip",
+        "item_type": "ingredient",
+        "description": "A strip torn from fallen enemies' garments",
+        "effect_value": 0, "emoji": "🧵",
+    },
+    "sulfur_chunk": {
+        "name": "Sulfur Chunk",
+        "item_type": "ingredient",
+        "description": "Reeking yellow rock — volatile when mixed right",
+        "effect_value": 0, "emoji": "🪨",
+    },
+    "red_mushroom": {
+        "name": "Red Mushroom",
+        "item_type": "ingredient",
+        "description": "Pulsing crimson cap — raw power in fungal form",
+        "effect_value": 0, "emoji": "🍄‍🟫",
+    },
+    "spider_silk": {
+        "name": "Spider Silk",
+        "item_type": "ingredient",
+        "description": "Incredibly tough thread harvested from cave spiders",
+        "effect_value": 0, "emoji": "🕸️",
+    },
+    "bone_shard": {
+        "name": "Bone Shard",
+        "item_type": "ingredient",
+        "description": "A sharp fragment from fallen undead",
+        "effect_value": 0, "emoji": "🦴",
+    },
+    "iron_ore": {
+        "name": "Iron Ore",
+        "item_type": "ingredient",
+        "description": "Raw iron ore, surprisingly heavy for its size",
+        "effect_value": 0, "emoji": "⛏️",
+    },
+    "wolf_pelt": {
+        "name": "Wolf Pelt",
+        "item_type": "ingredient",
+        "description": "A rough hide from a shadow wolf",
+        "effect_value": 0, "emoji": "🐺",
+    },
+}
+
+# ============================================
+# Crafting Recipes
+# ============================================
+# Each recipe: result_item_key -> list of ingredient keys (may repeat)
+
+CRAFT_RECIPES = {
+    "health_potion":          ["healing_herb", "empty_vial"],
+    "greater_health_potion":  ["health_potion", "healing_herb", "healing_herb"],
+    "mana_potion":            ["mana_crystal", "empty_vial"],
+    "antidote":               ["toxic_mushroom", "healing_herb"],
+    "bandage":                ["cloth_strip", "cloth_strip"],
+    "bomb":                   ["sulfur_chunk", "cloth_strip"],
+    "smoke_bomb":             ["sulfur_chunk", "cloth_strip", "cloth_strip"],
+    "elixir_of_strength":     ["red_mushroom", "empty_vial", "bone_shard"],
+    "elixir_of_swiftness":    ["spider_silk", "empty_vial", "mana_crystal"],
+}
+
+# What ingredients drop from each enemy type on death (random pick 0-1 from list)
+ENEMY_INGREDIENT_DROPS = {
+    "goblin":           ["cloth_strip", "healing_herb"],
+    "orc":              ["bone_shard", "cloth_strip", "iron_ore"],
+    "skeleton":         ["bone_shard", "bone_shard", "cloth_strip"],
+    "troll":            ["iron_ore", "sulfur_chunk"],
+    "wraith":           ["mana_crystal", "spider_silk"],
+    "cultist":          ["empty_vial", "sulfur_chunk", "toxic_mushroom"],
+    "shadow_beast":     ["wolf_pelt", "spider_silk"],
+    "dragon_boss":      ["mana_crystal", "sulfur_chunk", "red_mushroom"],
+    "lich_boss":        ["bone_shard", "mana_crystal", "empty_vial"],
+    "archivist_herald": ["mana_crystal", "empty_vial", "mana_crystal"],
 }
 
 

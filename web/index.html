@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Cinzel+Decorative:wght@400;700&family=Roboto+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <link rel="stylesheet" href="/static/app.css?v=14" />
+  <link rel="stylesheet" href="/static/app.css?v=15" />
 </head>
 <body>
 
@@ -378,18 +378,31 @@
 
       <!-- Inventory Modal -->
       <div class="modal-overlay hidden" id="inventory-modal">
-        <div class="modal card">
+        <div class="modal card inv-modal-wide">
           <div class="modal-header">
-            <h2>🎒 Inventory & Skills</h2>
+            <h2>🎒 Inventory</h2>
             <button class="modal-close" id="btn-close-inventory">✕</button>
           </div>
+          <!-- Tab bar -->
+          <div class="inv-tab-bar">
+            <button class="inv-tab active" data-tab="items">Items</button>
+            <button class="inv-tab" data-tab="craft">⚗️ Craft</button>
+            <button class="inv-tab" data-tab="skills">Skills</button>
+          </div>
           <div class="modal-body">
-            <div class="modal-section">
-              <h3>Items</h3>
+            <div class="inv-pane" id="inv-pane-items">
+              <!-- Equipped slots -->
+              <div id="inv-equipped-slots" class="inv-equipped-slots"><!-- JS --></div>
+              <div class="inv-section-title" style="margin-top:14px">Backpack</div>
               <div id="inventory-items" class="item-grid"><!-- JS --></div>
             </div>
-            <div class="modal-section">
-              <h3>Skills</h3>
+            <div class="inv-pane hidden" id="inv-pane-craft">
+              <div class="inv-section-title">Crafting Bench</div>
+              <p class="inv-craft-hint">Combine ingredients to forge potions and tools.</p>
+              <div id="inventory-crafting" class="crafting-list"><!-- JS --></div>
+            </div>
+            <div class="inv-pane hidden" id="inv-pane-skills">
+              <div class="inv-section-title">Known Skills</div>
               <div id="inventory-skills" class="skill-grid"><!-- JS --></div>
             </div>
           </div>

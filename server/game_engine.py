@@ -59,6 +59,8 @@ from shared.constants import (
     EQUIPMENT_RARITY_WEIGHTS,
     EQUIPMENT_DROP_BY_ROOM,
     COMPANION_ACTIONS,
+    CRAFT_RECIPES,
+    ENEMY_INGREDIENT_DROPS,
 )
 from server.connection_manager import ConnectionManager
 from server.ai_dungeon_master import AIDungeonMaster
@@ -343,8 +345,10 @@ class GameEngine:
             MessageType.DM_CONFIG: self._handle_dm_config,
             # Progression
             MessageType.SKILL_CHOSEN: self._handle_skill_chosen,
-            # Equipment
+            # Equipment & Crafting
             MessageType.EQUIP_ITEM: self._handle_equip_item,
+            MessageType.CRAFT: self._handle_craft,
+            MessageType.GIVE_ITEM: self._handle_give_item,
             # Party
             MessageType.PARTY_CHAT: self._handle_party_chat,
         }
@@ -2030,7 +2034,38 @@ class GameEngine:
 
         player.stats.experience += total_xp
         player.stats.gold += total_gold
-        log.append(f"Victory! You defeated all enemies. +{total_xp} XP, +{total_gold} gold.")
+
+        # Drop crafting ingredients from enemies (each enemy has a 50% chance to drop one)
+        ingredient_drops: list[str] = []
+        if current_room:
+            for enemy in current_room.enemies:
+                # Match enemy to a template key by name
+                for tkey, tmpl in ENEMY_TEMPLATES.items():
+                    if tmpl["name"] == enemy.name:
+                        pool = ENEMY_INGREDIENT_DROPS.get(tkey, [])
+                        if pool and random.random() < 0.5:
+                            drop = random.choice(pool)
+                            ingredient_drops.append(drop)
+                            # Add ingredient to dungeon room so it can be looted
+                            from shared.models import Item as ItemModel, ItemType
+                            ing_tmpl = ITEM_TEMPLATES.get(drop, {})
+                            room_item = ItemModel(
+                                name=drop,
+                                description=ing_tmpl.get("description", ""),
+                                emoji=ing_tmpl.get("emoji", "📦"),
+                                item_type=ItemType.RESOURCE,
+                                effect_value=0,
+                            )
+                            current_room.items.append(room_item)
+                        break
+
+        drop_msg = ""
+        if ingredient_drops:
+            from shared.constants import ITEM_TEMPLATES as IT
+            names = [IT.get(d, {}).get("name", d) for d in ingredient_drops]
+            drop_msg = f" Dropped: {', '.join(names)}."
+
+        log.append(f"Victory! +{total_xp} XP, +{total_gold} gold.{drop_msg}")
 
         # Mark room cleared
         if current_room:
@@ -2396,20 +2431,170 @@ class GameEngine:
             return GameMessage(type=MessageType.ERROR, payload={"error": "Item not in inventory"})
         slot = template.get("slot", "weapon")  # "weapon", "armor", or "accessory"
         old_item = getattr(player.stats.equipped, slot, None)
+
+        # Remove old item's stat bonuses before swapping
         if old_item:
+            old_tmpl = EQUIPMENT_TEMPLATES.get(old_item, {})
+            for stat_name, val in old_tmpl.get("stat_bonus", {}).items():
+                cur = getattr(player.stats, stat_name, None)
+                if cur is not None:
+                    setattr(player.stats, stat_name, max(0, cur - val))
+            # Clamp health/mana after removing bonuses
+            player.stats.health = min(player.stats.health, player.stats.max_health)
+            player.stats.mana = min(player.stats.mana, player.stats.max_mana)
             player.inventory.append(old_item)
+
+        # Apply new item's stat bonuses
+        for stat_name, val in template.get("stat_bonus", {}).items():
+            cur = getattr(player.stats, stat_name, None)
+            if cur is not None:
+                setattr(player.stats, stat_name, cur + val)
+                if stat_name == "max_health":
+                    player.stats.health = min(player.stats.health + val, player.stats.max_health)
+                if stat_name == "max_mana":
+                    player.stats.mana = min(player.stats.mana + val, player.stats.max_mana)
+
         setattr(player.stats.equipped, slot, item_key)
         player.inventory.remove(item_key)
+
+        bonuses = template.get("stat_bonus", {})
+        bonus_str = ", ".join(f"+{v} {k.upper()}" for k, v in bonuses.items()) if bonuses else ""
+        msg = f"Equipped {template['name']}!" + (f" ({bonus_str})" if bonus_str else "")
         return GameMessage(
             type=MessageType.SUCCESS,
             payload={
-                "message": f"Equipped {template['name']}!",
+                "message": msg,
                 "item_key": item_key,
                 "slot": slot,
                 "player_stats": player.stats.model_dump(),
                 "inventory": player.inventory,
             }
         )
+
+    # ============================================
+    # Crafting
+    # ============================================
+
+    async def _handle_craft(
+        self,
+        connection_id: str,
+        message: GameMessage,
+        manager: ConnectionManager
+    ) -> GameMessage:
+        """Craft an item from ingredients. Payload: { "recipe": "health_potion" }"""
+        player_id = self._connection_to_player.get(connection_id)
+        if not player_id:
+            return GameMessage(type=MessageType.ERROR, payload={"error": "Not connected"})
+        player = self._players.get(player_id)
+        if not player:
+            return GameMessage(type=MessageType.ERROR, payload={"error": "Player not found"})
+
+        recipe_key = message.payload.get("recipe", "")
+        ingredients = CRAFT_RECIPES.get(recipe_key)
+        if ingredients is None:
+            return GameMessage(type=MessageType.ERROR, payload={"error": f"Unknown recipe: {recipe_key}"})
+
+        # Validate all ingredients available
+        inv_copy = list(player.inventory)
+        missing = []
+        for ing in ingredients:
+            if ing in inv_copy:
+                inv_copy.remove(ing)
+            else:
+                missing.append(ing)
+        if missing:
+            tmpl_names = [ITEM_TEMPLATES.get(m, {}).get("name", m) for m in missing]
+            return GameMessage(type=MessageType.ERROR, payload={
+                "error": f"Missing: {', '.join(tmpl_names)}"
+            })
+
+        # Consume ingredients
+        for ing in ingredients:
+            player.inventory.remove(ing)
+
+        # Add result
+        player.inventory.append(recipe_key)
+        result_tmpl = ITEM_TEMPLATES.get(recipe_key) or EQUIPMENT_TEMPLATES.get(recipe_key) or {}
+        result_name = result_tmpl.get("name", recipe_key)
+        result_emoji = result_tmpl.get("emoji", "📦")
+        return GameMessage(
+            type=MessageType.SUCCESS,
+            payload={
+                "message": f"You crafted {result_emoji} {result_name}!",
+                "crafted_item": recipe_key,
+                "player_stats": player.stats.model_dump(),
+                "inventory": player.inventory,
+            }
+        )
+
+    # ============================================
+    # Item Transfer
+    # ============================================
+
+    async def _handle_give_item(
+        self,
+        connection_id: str,
+        message: GameMessage,
+        manager: ConnectionManager
+    ) -> GameMessage:
+        """Give an item to another party member.
+        Payload: { "item_key": "health_potion", "target_player_id": "pid_..." }
+        """
+        player_id = self._connection_to_player.get(connection_id)
+        if not player_id:
+            return GameMessage(type=MessageType.ERROR, payload={"error": "Not connected"})
+        player = self._players.get(player_id)
+        if not player:
+            return GameMessage(type=MessageType.ERROR, payload={"error": "Player not found"})
+
+        item_key = message.payload.get("item_key", "")
+        target_id = message.payload.get("target_player_id", "")
+
+        party = self._get_party_for_player(player_id)
+        if not party or target_id not in party.member_ids:
+            return GameMessage(type=MessageType.ERROR, payload={"error": "Target not in your party"})
+        if target_id == player_id:
+            return GameMessage(type=MessageType.ERROR, payload={"error": "You can't give to yourself"})
+
+        if item_key not in player.inventory:
+            return GameMessage(type=MessageType.ERROR, payload={"error": "Item not in your inventory"})
+
+        target = self._players.get(target_id)
+        if not target:
+            return GameMessage(type=MessageType.ERROR, payload={"error": "Target player not found"})
+
+        player.inventory.remove(item_key)
+        target.inventory.append(item_key)
+
+        item_tmpl = ITEM_TEMPLATES.get(item_key) or EQUIPMENT_TEMPLATES.get(item_key) or {}
+        item_name = item_tmpl.get("name", item_key)
+        item_emoji = item_tmpl.get("emoji", "📦")
+
+        # Notify giver
+        await manager.send_to(connection_id, GameMessage(
+            type=MessageType.SUCCESS,
+            payload={
+                "message": f"You gave {item_emoji} {item_name} to {target.name}.",
+                "inventory": player.inventory,
+                "player_stats": player.stats.model_dump(),
+            }
+        ))
+        # Notify receiver
+        target_cid = self._player_connection_id(target_id)
+        if target_cid:
+            await manager.send_to(target_cid, GameMessage(
+                type=MessageType.GAME_EVENT,
+                payload={
+                    "event": "item_received",
+                    "from_name": player.name,
+                    "item_key": item_key,
+                    "item_name": item_name,
+                    "item_emoji": item_emoji,
+                    "inventory": target.inventory,
+                    "player_stats": target.stats.model_dump(),
+                }
+            ))
+        return None  # Responses already sent
 
     # ============================================
     # Game Clock
