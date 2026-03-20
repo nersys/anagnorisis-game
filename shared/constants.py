@@ -75,6 +75,16 @@ CLASS_BASE_STATS = {
         "dexterity": 14,
         "charisma": 8,
     },
+    "goblin": {
+        "health": 165,
+        "max_health": 165,
+        "mana": 35,
+        "max_mana": 35,
+        "strength": 17,
+        "intelligence": 8,
+        "dexterity": 10,
+        "charisma": 8,
+    },
 }
 
 # Starting skills by class
@@ -84,6 +94,7 @@ CLASS_STARTING_SKILLS = {
     "rogue": ["backstab", "stealth", "pickpocket"],
     "cleric": ["heal", "smite", "bless"],
     "ranger": ["aimed_shot", "trap", "animal_companion"],
+    "goblin": ["headbutt", "feral_bite", "goblin_rage"],
 }
 
 # Companion auto-actions in combat (one action per turn after enemy attacks)
@@ -113,6 +124,11 @@ COMPANION_ACTIONS = {
         "action": "damage", "dtype": "nature", "value": 0.65,
         "msg": "Fang lunges at the enemy — {dmg} nature damage!",
     },
+    "goblin": {
+        "name": "Snark", "emoji": "🐀",
+        "action": "damage", "dtype": "physical", "value": 0.40,
+        "msg": "Snark the rat scurries in and bites — {dmg} damage!",
+    },
 }
 
 # Starting inventory by class
@@ -122,6 +138,7 @@ CLASS_STARTING_INVENTORY = {
     "rogue": ["twin_daggers", "lockpicks", "smoke_bomb"],
     "cleric": ["holy_mace", "prayer_beads", "bandages"],
     "ranger": ["longbow", "quiver", "hunting_knife"],
+    "goblin": ["iron_sword", "health_potion", "health_potion"],
 }
 
 
@@ -150,6 +167,7 @@ LEVEL_STAT_GAINS = {
     "rogue":   {"max_health": 8,  "max_mana": 8,  "strength": 1, "dexterity": 2, "intelligence": 1},
     "cleric":  {"max_health": 10, "max_mana": 10, "strength": 1, "dexterity": 0, "intelligence": 2},
     "ranger":  {"max_health": 9,  "max_mana": 8,  "strength": 1, "dexterity": 2, "intelligence": 0},
+    "goblin":  {"max_health": 18, "max_mana": 2,  "strength": 3, "dexterity": 0, "intelligence": 0},
 }
 
 # Skills offered at each level-up (3 choices per class per level)
@@ -183,6 +201,12 @@ LEVEL_SKILL_UNLOCKS = {
         3: ["explosive_shot", "camouflage", "multi_shot"],
         4: ["bestial_fury", "piercing_arrow", "hawk_eye"],
         5: ["storm_of_arrows", "apex_predator", "nature_bond"],
+    },
+    "goblin": {
+        2: ["reckless_charge", "power_strike", "whirlwind"],
+        3: ["blood_frenzy", "execute", "bone_crusher"],
+        4: ["skull_crusher", "berserker_rage", "iron_skin"],
+        5: ["goblin_king_shout", "blade_storm", "rampage"],
     },
 }
 
@@ -222,6 +246,7 @@ CLASS_ICONS = {
     "rogue": "🗡️",
     "cleric": "✝️",
     "ranger": "🏹",
+    "goblin": "👺",
 }
 
 
@@ -617,6 +642,63 @@ SKILL_DEFINITIONS = {
         "description": "Fire-tipped arrow — burns on impact",
         "damage_multiplier": 1.8, "mp_cost": 15,
         "damage_type": "fire", "cooldown_turns": 3, "status_effect": "burn",
+    },
+    # ── Goblin ─────────────────────────────────────
+    "headbutt": {
+        "name": "Headbutt", "emoji": "💢",
+        "description": "Slam your thick skull into the enemy — stuns them",
+        "damage_multiplier": 1.2, "mp_cost": 6,
+        "effect": "stun", "damage_type": "physical", "cooldown_turns": 2,
+    },
+    "feral_bite": {
+        "name": "Feral Bite", "emoji": "🦷",
+        "description": "Savage bite that infects the wound with poison",
+        "damage_multiplier": 1.1, "mp_cost": 5,
+        "damage_type": "physical", "cooldown_turns": 0, "status_effect": "poison",
+    },
+    "goblin_rage": {
+        "name": "Goblin Rage", "emoji": "😤",
+        "description": "Fly into a frenzy — attack power surges for 3 turns",
+        "damage_multiplier": 0.0, "mp_cost": 8,
+        "effect": "buff_attack", "cooldown_turns": 4,
+    },
+    "reckless_charge": {
+        "name": "Reckless Charge", "emoji": "🐗",
+        "description": "Smash into the enemy with full body weight — massive damage",
+        "damage_multiplier": 2.2, "mp_cost": 10,
+        "damage_type": "physical", "cooldown_turns": 3,
+    },
+    "blood_frenzy": {
+        "name": "Blood Frenzy", "emoji": "🩸",
+        "description": "The sight of blood drives you wild — AOE strike, applies weakened",
+        "damage_multiplier": 1.4, "mp_cost": 12,
+        "effect": "aoe", "damage_type": "physical", "cooldown_turns": 3,
+        "status_effect": "weakened",
+    },
+    "bone_crusher": {
+        "name": "Bone Crusher", "emoji": "🦴",
+        "description": "A brutal overhead blow that shatters defense",
+        "damage_multiplier": 1.8, "mp_cost": 10,
+        "damage_type": "physical", "cooldown_turns": 2, "status_effect": "weakened",
+    },
+    "skull_crusher": {
+        "name": "Skull Crusher", "emoji": "💀",
+        "description": "Execute a stunned or weakened enemy with lethal force",
+        "damage_multiplier": 2.5, "mp_cost": 14,
+        "effect": "execute", "damage_type": "physical", "cooldown_turns": 4,
+    },
+    "goblin_king_shout": {
+        "name": "Goblin King Shout", "emoji": "👑",
+        "description": "Terrifying war shout — stuns all enemies simultaneously",
+        "damage_multiplier": 0.5, "mp_cost": 15,
+        "effect": "aoe", "damage_type": "physical", "cooldown_turns": 5,
+        "status_effect": "weakened",
+    },
+    "rampage": {
+        "name": "Rampage", "emoji": "🌪️",
+        "description": "Berserk flurry of attacks — hits all enemies 1.6x",
+        "damage_multiplier": 1.6, "mp_cost": 14,
+        "effect": "aoe", "damage_type": "physical", "cooldown_turns": 4,
     },
 }
 

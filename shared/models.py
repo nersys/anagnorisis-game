@@ -118,6 +118,7 @@ class PlayerClass(str, Enum):
     ROGUE = "rogue"
     CLERIC = "cleric"
     RANGER = "ranger"
+    GOBLIN = "goblin"
 
 
 class EquippedItems(BaseModel):
