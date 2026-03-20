@@ -1346,7 +1346,116 @@ async function startAdventure() {
     console.warn('[Adventure] No location available — using classic dungeon');
   }
 
+  showAdventureStartCinematic(name);
   ws.send('START_ADVENTURE', payload);
+}
+
+// ── Cinematic overlay shown while the server generates the dungeon ──
+function showAdventureStartCinematic(adventureName) {
+  // Remove any existing one
+  const existing = document.getElementById('adventure-start-cinematic');
+  if (existing) existing.remove();
+
+  const LINES = [
+    'The dungeon awakens…',
+    'Fate is being woven…',
+    'Your destiny calls…',
+    'The realm takes shape…',
+  ];
+
+  const overlay = document.createElement('div');
+  overlay.id = 'adventure-start-cinematic';
+  overlay.innerHTML = `
+    <canvas id="asc-canvas"></canvas>
+    <div class="asc-center">
+      <div class="asc-sigil">
+        <svg viewBox="0 0 200 200" fill="none">
+          <circle class="asc-ring" cx="100" cy="100" r="88" stroke-dasharray="553 553" stroke-dashoffset="553"/>
+          <circle class="asc-ring-inner" cx="100" cy="100" r="62" stroke-dasharray="390 390" stroke-dashoffset="390"/>
+          <path class="asc-cross" d="M100 28 L100 172 M28 100 L172 100" stroke-dasharray="300 300" stroke-dashoffset="300"/>
+          <circle class="asc-center-dot" cx="100" cy="100" r="5" opacity="0"/>
+        </svg>
+      </div>
+      <div class="asc-title" id="asc-title"></div>
+      <div class="asc-adventure-name" id="asc-adv-name"></div>
+      <div class="asc-flavor" id="asc-flavor">${LINES[0]}</div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  // Inject title letters with stagger
+  const TITLE = 'ADVENTURE BEGINS';
+  const titleEl = document.getElementById('asc-title');
+  if (titleEl) {
+    titleEl.innerHTML = TITLE.split('').map((ch, i) =>
+      ch === ' '
+        ? `<span style="display:inline-block;width:0.4em"></span>`
+        : `<span class="asc-letter" style="animation-delay:${0.6 + i * 0.05}s">${ch}</span>`
+    ).join('');
+  }
+
+  // Adventure name reveal
+  const nameEl = document.getElementById('asc-adv-name');
+  if (nameEl) {
+    nameEl.textContent = adventureName;
+    nameEl.style.animationDelay = '1.6s';
+  }
+
+  // Cycle flavor lines
+  let flIdx = 0;
+  const flavEl = document.getElementById('asc-flavor');
+  const flTimer = setInterval(() => {
+    if (!flavEl) return;
+    flavEl.style.opacity = '0';
+    setTimeout(() => {
+      flIdx = (flIdx + 1) % LINES.length;
+      if (flavEl) { flavEl.textContent = LINES[flIdx]; flavEl.style.opacity = ''; }
+    }, 300);
+  }, 900);
+
+  // Ember canvas
+  const canvas = document.getElementById('asc-canvas');
+  if (canvas) {
+    const ctx = canvas.getContext('2d');
+    let W, H, embers = [];
+    function resize() { W = canvas.width = window.innerWidth; H = canvas.height = window.innerHeight; }
+    resize();
+    window.addEventListener('resize', resize);
+    function spawnEmber() {
+      return { x: Math.random() * W, y: H + 8,
+               vx: (Math.random()-0.5)*0.5, vy: -(0.5+Math.random()*1.2),
+               life: 1, decay: 0.004+Math.random()*0.006,
+               r: 1+Math.random()*2, hue: 28+Math.random()*20 };
+    }
+    for (let i = 0; i < 30; i++) { const e = spawnEmber(); e.y = Math.random()*H; embers.push(e); }
+    let rafId;
+    function draw() {
+      ctx.clearRect(0, 0, W, H);
+      if (Math.random() < 0.4) embers.push(spawnEmber());
+      embers = embers.filter(e => e.life > 0);
+      embers.forEach(e => {
+        e.x += e.vx + Math.sin(Date.now()*0.001+e.y*0.01)*0.12;
+        e.y += e.vy; e.life -= e.decay;
+        const a = Math.max(0, e.life*0.8);
+        ctx.beginPath(); ctx.arc(e.x, e.y, e.r, 0, Math.PI*2);
+        ctx.fillStyle = `hsla(${e.hue},90%,65%,${a})`; ctx.fill();
+        ctx.beginPath(); ctx.arc(e.x, e.y, e.r*2.5, 0, Math.PI*2);
+        ctx.fillStyle = `hsla(${e.hue},90%,65%,${a*0.18})`; ctx.fill();
+      });
+      rafId = requestAnimationFrame(draw);
+    }
+    draw();
+    overlay._stopCanvas = () => cancelAnimationFrame(rafId);
+  }
+
+  // Expose dismiss function — called by ROOM_ENTERED handler
+  window._dismissAdventureCinematic = function() {
+    clearInterval(flTimer);
+    if (overlay._stopCanvas) overlay._stopCanvas();
+    overlay.classList.add('asc-done');
+    setTimeout(() => { if (overlay.parentNode) overlay.parentNode.removeChild(overlay); }, 700);
+    delete window._dismissAdventureCinematic;
+  };
 }
 
 function lobbyToast(msg) {
@@ -2091,10 +2200,33 @@ function renderPhaseBanner() {
   const phaseLabel = PHASE_LABELS[phase] || phase.toUpperCase();
   let turnIndicatorHtml = '';
   if (phase === 'combat' && state.combat) {
-    const isPlayerTurn = state.combat.player_turn !== false;
-    const tLabel = isPlayerTurn ? '⚔️ YOUR TURN' : '💀 ENEMY TURN';
-    const tCls = isPlayerTurn ? 'player-turn' : 'enemy-turn';
-    turnIndicatorHtml = `<span class="turn-indicator ${tCls}">${tLabel}</span>`;
+    const activePid = state.combat.active_player_id;
+    const turnOrder = state.combat.turn_order || [];
+    const isMyTurn = !activePid || activePid === state.playerId;
+    let tLabel, tCls;
+    if (isMyTurn) {
+      tLabel = '⚔️ YOUR TURN';
+      tCls = 'player-turn';
+    } else {
+      // Find active player name from partyMembersStats
+      const cache = state.partyMembersStats || {};
+      const activeMember = cache[activePid];
+      const activeName = activeMember ? activeMember.name : 'Ally';
+      tLabel = `⏳ ${activeName}'s turn`;
+      tCls = 'ally-turn';
+    }
+    let orderHtml = '';
+    if (turnOrder.length > 1) {
+      const cache = state.partyMembersStats || {};
+      orderHtml = turnOrder.map(pid => {
+        const isActive = pid === activePid;
+        const m = cache[pid];
+        const nm = m ? m.name : (pid === state.playerId ? (state.player && state.player.name) || 'You' : '?');
+        return `<span class="turn-order-pip${isActive ? ' active' : ''}">${nm}</span>`;
+      }).join('<span class="turn-order-sep">→</span>');
+      orderHtml = `<span class="turn-order-row">${orderHtml}</span>`;
+    }
+    turnIndicatorHtml = `<span class="turn-indicator ${tCls}">${tLabel}</span>${orderHtml}`;
   }
   document.getElementById('phase-text').innerHTML = `<span class="phase-label">${phaseLabel}</span>${turnIndicatorHtml}`;
   document.getElementById('game-time').textContent = `Day ${state.gameDay} · ${String(state.gameHour).padStart(2,'0')}:00`;
@@ -2123,6 +2255,28 @@ function renderActionBar() {
     const p = state.player;
     const skills = (p && p.skills) ? p.skills : [];
     const hasPotion = p && p.inventory && p.inventory.some(i => (typeof i === 'string' ? i : i.name || '').includes('health_potion'));
+
+    // Check if it's this player's turn in party combat
+    const activePid = state.combat && state.combat.active_player_id;
+    const isMyTurn = !activePid || activePid === state.playerId;
+
+    if (!isMyTurn) {
+      // Waiting for another player's turn
+      const cache = state.partyMembersStats || {};
+      const activeMember = cache[activePid];
+      const activeName = activeMember ? activeMember.name : 'your ally';
+      bar.innerHTML = `
+        <div class="waiting-turn-panel">
+          <div class="waiting-turn-pulse"></div>
+          <div class="waiting-turn-text">
+            <span class="waiting-turn-icon">⚔️</span>
+            <span class="waiting-turn-name">${activeName}</span>
+            <span class="waiting-turn-label"> is taking their turn…</span>
+          </div>
+        </div>
+      `;
+      return;
+    }
 
     bar.innerHTML = `
       <div class="action-group">
@@ -2299,6 +2453,7 @@ function renderGameParty() {
     return;
   }
   const cache = state.partyMembersStats || {};
+  const activePid = state.combat && state.combat.active_player_id;
   el.innerHTML = otherIds.map(id => {
     const m = cache[id];
     if (!m) return `<div class="game-party-member"><div class="gpm-header"><span class="gpm-emoji">👤</span><div class="gpm-info"><span class="gpm-name">Adventurer</span><span class="gpm-meta">connecting...</span></div></div></div>`;
@@ -2306,11 +2461,12 @@ function renderGameParty() {
     const hpPct = pctOf(m.hp, m.max_hp);
     const mpPct = pctOf(m.mana, m.max_mana);
     const hpColor = hpPct < 25 ? '#e53935' : hpPct < 50 ? '#fb8c00' : '#4caf50';
-    return `<div class="game-party-member">
+    const isActive = activePid === id;
+    return `<div class="game-party-member${isActive ? ' gpm-active-turn' : ''}">
       <div class="gpm-header">
         <span class="gpm-emoji">${cls.emoji}</span>
         <div class="gpm-info">
-          <span class="gpm-name">${m.name}</span>
+          <span class="gpm-name">${m.name}${isActive ? ' <span class="gpm-turn-badge">TURN</span>' : ''}</span>
           <span class="gpm-meta">Lv ${m.level} ${m.player_class}</span>
         </div>
         <span class="gpm-hp-num" style="color:${hpColor}">${m.hp}/${m.max_hp}</span>
@@ -2999,6 +3155,9 @@ function setupHandlers() {
   ws.on('ROOM_ENTERED', msg => {
     const payload = msg.payload || {};
     applyStateUpdate(payload);
+
+    // Dismiss the "Adventure Begins" cinematic if active
+    if (window._dismissAdventureCinematic) window._dismissAdventureCinematic();
 
     if (state.screen !== 'game') {
       showScreen('game');
