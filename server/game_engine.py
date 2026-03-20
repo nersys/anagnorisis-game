@@ -216,6 +216,18 @@ class GameEngine:
                 continue
 
             party.member_ids = [pid for pid in party.member_ids if pid != player_id]
+            self._sync_explore_turn_order(party)
+
+            shared_combat = next(
+                (
+                    self._player_combat.get(pid)
+                    for pid in party.member_ids
+                    if self._player_combat.get(pid) is not None
+                ),
+                None,
+            )
+            if shared_combat:
+                self._sync_combat_turn_order(shared_combat, party.member_ids)
 
             if not party.member_ids:
                 adventure_id = party.current_adventure_id
@@ -270,12 +282,71 @@ class GameEngine:
             if cid:
                 await manager.send_to(cid, message)
 
+    def _sync_explore_turn_order(self, party) -> None:
+        """Drop stale players from explore turn order while preserving the active turn when possible."""
+        if not party:
+            return
+
+        current_order = list(party.explore_turn_order)
+        old_idx = party.explore_turn_idx
+        old_active = None
+        if current_order:
+            old_active = current_order[old_idx % len(current_order)]
+
+        valid = [pid for pid in current_order if pid in party.member_ids]
+        missing = [pid for pid in party.member_ids if pid not in valid]
+        if not valid:
+            valid = list(party.member_ids)
+        else:
+            valid.extend(missing)
+
+        party.explore_turn_order = valid
+        if not valid:
+            party.explore_turn_idx = 0
+        elif old_active in valid:
+            party.explore_turn_idx = valid.index(old_active)
+        else:
+            party.explore_turn_idx = min(old_idx, len(valid) - 1)
+
+    def _sync_combat_turn_order(self, combat: CombatState, member_ids: list[str]) -> None:
+        """Keep party combat turn order aligned with current living members."""
+        current_order = list(combat.turn_order)
+        if not current_order:
+            return
+
+        old_idx = combat.current_turn_idx
+        old_active = current_order[old_idx % len(current_order)]
+        valid_members = [
+            pid for pid in member_ids
+            if self._player_phase.get(pid) == GamePhase.COMBAT and self._player_combat.get(pid) is combat
+        ]
+        valid = [pid for pid in current_order if pid in valid_members]
+        missing = [pid for pid in valid_members if pid not in valid]
+        valid.extend(missing)
+
+        combat.turn_order = valid
+        if not valid:
+            combat.current_turn_idx = 0
+        elif old_active in valid:
+            combat.current_turn_idx = valid.index(old_active)
+        else:
+            combat.current_turn_idx = min(old_idx, len(valid) - 1)
+
+    def _ensure_combat_player_state(self, combat: CombatState, player_id: str) -> None:
+        """Initialize per-player combat state containers on demand."""
+        combat.player_buff_turns.setdefault(player_id, 0)
+        combat.player_shield_turns.setdefault(player_id, 0)
+        combat.player_stealth_flags.setdefault(player_id, False)
+        combat.skill_cooldowns_by_player.setdefault(player_id, {})
+        combat.player_status_by_player.setdefault(player_id, [])
+
     # ============================================
     # Explore Turn Helpers
     # ============================================
 
     def _explore_active_player(self, party) -> str | None:
         """Return the player_id whose explore turn it is, or None for solo."""
+        self._sync_explore_turn_order(party)
         if not party or len(party.explore_turn_order) <= 1:
             return None  # solo — always their turn
         if not party.explore_turn_order:
@@ -297,12 +368,14 @@ class GameEngine:
 
     def _advance_explore_turn(self, party) -> None:
         """Move to the next player's explore turn, skipping dead/disconnected players."""
+        self._sync_explore_turn_order(party)
         if not party or len(party.explore_turn_order) <= 1:
             return
         party.explore_turn_idx = (party.explore_turn_idx + 1) % len(party.explore_turn_order)
 
     def _explore_turn_payload(self, party) -> dict:
         """Return the explore-turn fields to include in every broadcast payload."""
+        self._sync_explore_turn_order(party)
         if not party or not party.explore_turn_order:
             return {}
         active = self._explore_active_player(party)
@@ -1351,6 +1424,8 @@ class GameEngine:
 
         party = self._get_party_for_player(player_id)
         member_ids = list(party.member_ids) if party else [player_id]
+        self._sync_combat_turn_order(combat, member_ids)
+        self._ensure_combat_player_state(combat, player_id)
 
         # ── Turn order enforcement ──────────────────────────────────────────
         # If a turn_order is set (party combat), only the active player may act.
@@ -1367,8 +1442,10 @@ class GameEngine:
 
         # --- Player turn ---
         if combat.player_turn:
-            # Process status effects at start of each turn
-            self._process_status_effects(combat, player, log)
+            round_start = not combat.turn_order or combat.current_turn_idx == 0
+            if round_start:
+                # Process round-based status effects once before the party acts.
+                self._process_status_effects(combat, member_ids, log)
             # Check if status effects killed the player
             if player.stats.health <= 0:
                 log.append("You succumb to your wounds! Game over.")
@@ -1397,7 +1474,7 @@ class GameEngine:
                         "log": log,
                         "phase": GamePhase.GAME_OVER.value,
                         "player_stats": player.stats.model_dump(),
-                        "combat": _combat_to_dict(combat),
+                        "combat": _combat_to_dict(combat, player_id),
                         "death_narrative": death_narrative,
                     }
                 ))
@@ -1437,7 +1514,6 @@ class GameEngine:
                     # Notify remaining party members of flee
                     remaining = [pid for pid in member_ids if pid != player_id]
                     if remaining:
-                        combat_dict = _combat_to_dict(combat)
                         pms = self._build_party_members_stats(party.id) if party else []
                         for pid in remaining:
                             pmember = self._players.get(pid)
@@ -1449,7 +1525,7 @@ class GameEngine:
                                         "log": log,
                                         "phase": GamePhase.COMBAT.value,
                                         "player_stats": pmember.stats.model_dump() if pmember else {},
-                                        "combat": combat_dict,
+                                        "combat": _combat_to_dict(combat, pid),
                                         "party_members_stats": pms,
                                     }
                                 ))
@@ -1476,6 +1552,28 @@ class GameEngine:
                 if len(member_ids) > 1:
                     result_log = [f"[{player.name}] {l}" for l in result_log]
                 log.extend(result_log)
+
+            if combat.enemies:
+                companion = COMPANION_ACTIONS.get(player.player_class.value)
+                if companion:
+                    target = next((e for e in combat.enemies if e.hp > 0), None)
+                    if target:
+                        c_action = companion["action"]
+                        if c_action == "damage":
+                            dmg = max(1, int(player.stats.strength * companion["value"]))
+                            target.hp = max(0, target.hp - dmg)
+                            log.append(f"[{companion['emoji']} {companion['name']}] " +
+                                       companion["msg"].format(dmg=dmg))
+                        elif c_action == "heal":
+                            val = max(3, int(player.stats.max_health * companion["value"]))
+                            player.stats.health = min(player.stats.max_health, player.stats.health + val)
+                            log.append(f"[{companion['emoji']} {companion['name']}] " +
+                                       companion["msg"].format(v=val))
+                        elif c_action == "shield":
+                            current = combat.player_shield_turns.get(player.id, 0)
+                            combat.player_shield_turns[player.id] = max(current, companion["value"])
+                            log.append(f"[{companion['emoji']} {companion['name']}] " +
+                                       companion["msg"])
 
             # Remove dead enemies
             combat.enemies = [e for e in combat.enemies if e.hp > 0]
@@ -1511,7 +1609,6 @@ class GameEngine:
                     next_name = next_player_obj.name if next_player_obj else "next adventurer"
                     log.append(f"⚔️ {next_name}'s turn!")
                     combat.log.extend(log)
-                    combat_dict = _combat_to_dict(combat)
                     pms = self._build_party_members_stats(party.id) if party else []
                     for pid in member_ids:
                         pmember = self._players.get(pid)
@@ -1523,7 +1620,7 @@ class GameEngine:
                                     "log": log,
                                     "phase": GamePhase.COMBAT.value,
                                     "player_stats": pmember.stats.model_dump() if pmember else {},
-                                    "combat": combat_dict,
+                                    "combat": _combat_to_dict(combat, pid),
                                     "party_members_stats": pms,
                                 }
                             ))
@@ -1603,7 +1700,7 @@ class GameEngine:
                         "log": log,
                         "phase": GamePhase.GAME_OVER.value,
                         "player_stats": dead_player.stats.model_dump() if dead_player else {},
-                        "combat": _combat_to_dict(combat),
+                        "combat": _combat_to_dict(combat, dead_pid),
                         "death_narrative": death_narrative,
                     }
                 ))
@@ -1618,38 +1715,22 @@ class GameEngine:
             return None
 
         # Decrement buff timers
-        if combat.player_buffed_turns > 0:
-            combat.player_buffed_turns -= 1
-            if combat.player_buffed_turns == 0:
-                self._player_attack_buff[player_id] = 0
-                log.append("Your attack buff fades.")
-        if combat.player_shielded_turns > 0:
-            combat.player_shielded_turns -= 1
+        for pid in member_ids:
+            buff_turns = combat.player_buff_turns.get(pid, 0)
+            if buff_turns > 0:
+                next_turns = buff_turns - 1
+                combat.player_buff_turns[pid] = next_turns
+                if next_turns == 0:
+                    self._player_attack_buff[pid] = 0
+                    faded = self._players.get(pid)
+                    if faded:
+                        log.append(f"{faded.name}'s attack buff fades.")
 
-        self._tick_skill_cooldowns(combat)
+            shield_turns = combat.player_shield_turns.get(pid, 0)
+            if shield_turns > 0:
+                combat.player_shield_turns[pid] = shield_turns - 1
 
-        # Companion auto-action (once per round, keyed to acting player's class)
-        if combat.enemies:
-            companion = COMPANION_ACTIONS.get(player.player_class.value)
-            if companion:
-                target = next((e for e in combat.enemies if e.hp > 0), None)
-                if target:
-                    c_action = companion["action"]
-                    if c_action == "damage":
-                        dmg = max(1, int(player.stats.strength * companion["value"]))
-                        target.hp = max(0, target.hp - dmg)
-                        log.append(f"[{companion['emoji']} {companion['name']}] " +
-                                   companion["msg"].format(dmg=dmg))
-                    elif c_action == "heal":
-                        val = max(3, int(player.stats.max_health * companion["value"]))
-                        player.stats.health = min(player.stats.max_health, player.stats.health + val)
-                        log.append(f"[{companion['emoji']} {companion['name']}] " +
-                                   companion["msg"].format(v=val))
-                    elif c_action == "shield":
-                        combat.player_shielded_turns = max(combat.player_shielded_turns,
-                                                           companion["value"])
-                        log.append(f"[{companion['emoji']} {companion['name']}] " +
-                                   companion["msg"])
+            self._tick_skill_cooldowns(combat, pid)
 
         # Mana regen for each surviving party member
         for pid in member_ids:
@@ -1666,7 +1747,6 @@ class GameEngine:
         combat.log.extend(log)
 
         # Broadcast combat state to ALL surviving party members
-        combat_dict = _combat_to_dict(combat)
         party_members_stats = self._build_party_members_stats(party.id) if party else []
         for pid in member_ids:
             pmember = self._players.get(pid)
@@ -1678,7 +1758,7 @@ class GameEngine:
                         "log": log,
                         "phase": GamePhase.COMBAT.value,
                         "player_stats": pmember.stats.model_dump() if pmember else {},
-                        "combat": combat_dict,
+                        "combat": _combat_to_dict(combat, pid),
                         "party_members_stats": party_members_stats,
                     }
                 ))
@@ -1708,9 +1788,9 @@ class GameEngine:
             type_mult = 0.65
             type_tag = " 🛡 RESISTED"
         final = max(1, int(dmg * type_mult) - target.defense)
-        if combat.player_stealth:
+        if combat.player_stealth_flags.get(player.id):
             final = int(final * 2)
-            combat.player_stealth = False
+            combat.player_stealth_flags[player.id] = False
             msg = f"STEALTH STRIKE! You deal {final} {damage_type} damage to {target.name}!{type_tag}"
         else:
             msg = f"You attack {target.name} for {final} {damage_type} damage.{type_tag}"
@@ -1724,7 +1804,7 @@ class GameEngine:
         """Calculate enemy attack and return (damage, log_message)."""
         base = enemy.attack + random.randint(1, 4)
         reduction = 1.0
-        if combat.player_shielded_turns > 0:
+        if combat.player_shield_turns.get(player.id, 0) > 0:
             reduction = 0.5
         # Apply equipped armor defense bonus
         armor_bonus = 0
@@ -1740,13 +1820,15 @@ class GameEngine:
     def _apply_skill(self, player, combat: CombatState, skill_name: str) -> list[str]:
         """Apply a skill effect, return log messages."""
         log = []
+        self._ensure_combat_player_state(combat, player.id)
         skill = SKILL_DEFINITIONS.get(skill_name)
         if not skill:
             log.append(f"Unknown skill: {skill_name}")
             return log
 
         # Check cooldown
-        cd = combat.skill_cooldowns.get(skill_name, 0)
+        cooldowns = combat.skill_cooldowns_by_player[player.id]
+        cd = cooldowns.get(skill_name, 0)
         if cd > 0:
             log.append(f"{skill['name']} is on cooldown for {cd} more turn(s)!")
             return log
@@ -1761,7 +1843,7 @@ class GameEngine:
         # Set cooldown
         cooldown = skill.get("cooldown_turns", 0)
         if cooldown > 0:
-            combat.skill_cooldowns[skill_name] = cooldown
+            cooldowns[skill_name] = cooldown
 
         effect = skill.get("effect", "")
         mult = skill.get("damage_multiplier", 1.0)
@@ -1777,7 +1859,7 @@ class GameEngine:
 
         # ── Shield ─────────────────────────────────────────
         if effect == "shield":
-            combat.player_shielded_turns = 4
+            combat.player_shield_turns[player.id] = 4
             log.append(f"🛡️ You cast {skill['name']}! Damage reduced for 4 turns.")
             return log
 
@@ -1785,13 +1867,13 @@ class GameEngine:
         if effect == "buff_attack":
             buff = 6 if skill_name == "berserker_rage" else 4
             self._player_attack_buff[player.id] = buff
-            combat.player_buffed_turns = 3
+            combat.player_buff_turns[player.id] = 3
             log.append(f"📣 You use {skill['name']}! Attack increased by {buff} for 3 turns.")
             return log
 
         # ── Stealth ────────────────────────────────────────
         if effect == "stealth":
-            combat.player_stealth = True
+            combat.player_stealth_flags[player.id] = True
             log.append(f"🌑 You vanish into shadow! Next attack deals 2x damage.")
             return log
 
@@ -1918,21 +2000,27 @@ class GameEngine:
             })
             log.append(f"{effect_def['emoji']} {target.name} is {effect_def['label']}!")
 
-    def _process_status_effects(self, combat: CombatState, player, log: list):
-        """Tick all active status effects at start of each full turn."""
-        # Player status effects
-        still_active = []
-        for eff in combat.player_status_effects:
-            dmg = STATUS_EFFECTS.get(eff["type"], {}).get("damage_per_turn", 0)
-            if dmg > 0:
-                player.stats.health = max(0, player.stats.health - dmg)
-                log.append(f"{eff['emoji']} {eff['label']}: you take {dmg} damage.")
-            eff["turns"] -= 1
-            if eff["turns"] > 0:
-                still_active.append(eff)
-            else:
-                log.append(f"{eff['label']} fades.")
-        combat.player_status_effects = still_active
+    def _process_status_effects(self, combat: CombatState, member_ids: list[str], log: list):
+        """Tick round-based status effects once before the party acts."""
+        for pid in member_ids:
+            player = self._players.get(pid)
+            if not player or player.stats.health <= 0:
+                continue
+            effects = combat.player_status_by_player.get(pid, [])
+            still_active = []
+            for eff in effects:
+                dmg = STATUS_EFFECTS.get(eff["type"], {}).get("damage_per_turn", 0)
+                if dmg > 0:
+                    player.stats.health = max(0, player.stats.health - dmg)
+                    label = "you" if len(member_ids) == 1 else player.name
+                    log.append(f"{eff['emoji']} {eff['label']}: {label} take{'' if label == 'you' else 's'} {dmg} damage.")
+                eff["turns"] -= 1
+                if eff["turns"] > 0:
+                    still_active.append(eff)
+                else:
+                    faded = "Your" if len(member_ids) == 1 else f"{player.name}'s"
+                    log.append(f"{faded} {eff['label'].lower()} fades.")
+            combat.player_status_by_player[pid] = still_active
 
         # Enemy status effects
         for enemy in combat.enemies:
@@ -1948,10 +2036,11 @@ class GameEngine:
                     remaining.append(eff)
             combat.enemy_status_effects[enemy.id] = remaining
 
-    def _tick_skill_cooldowns(self, combat: CombatState):
-        """Decrement all skill cooldowns by 1."""
-        combat.skill_cooldowns = {
-            k: max(0, v - 1) for k, v in combat.skill_cooldowns.items() if v > 1
+    def _tick_skill_cooldowns(self, combat: CombatState, player_id: str):
+        """Decrement one player's skill cooldowns by 1 after a full round."""
+        cooldowns = combat.skill_cooldowns_by_player.get(player_id, {})
+        combat.skill_cooldowns_by_player[player_id] = {
+            k: v - 1 for k, v in cooldowns.items() if v > 1
         }
 
     def _use_item_in_combat(self, player, item_id: str) -> list[str]:
@@ -2208,6 +2297,20 @@ class GameEngine:
 
         self._advance_explore_turn(party)
         explore_turn = self._explore_turn_payload(party)
+        party_members_stats = self._build_party_members_stats(party.id) if party else []
+        if party:
+            await manager.broadcast_to_party(
+                party.id,
+                GameMessage(
+                    type=MessageType.STATE_UPDATE,
+                    payload={
+                        "dungeon": _dungeon_to_dict(dungeon),
+                        "party_members_stats": party_members_stats,
+                        **explore_turn,
+                    },
+                ),
+                exclude=connection_id,
+            )
         return GameMessage(
             type=MessageType.SUCCESS,
             payload={
@@ -2217,6 +2320,7 @@ class GameEngine:
                 "player_stats": player.stats.model_dump(),
                 "inventory": player.inventory,
                 "dungeon": _dungeon_to_dict(dungeon),
+                "party_members_stats": party_members_stats,
                 **explore_turn,
             }
         )
@@ -2325,6 +2429,19 @@ class GameEngine:
 
         self._advance_explore_turn(party)
         explore_turn = self._explore_turn_payload(party)
+        party_members_stats = self._build_party_members_stats(party.id) if party else []
+        if party:
+            await manager.broadcast_to_party(
+                party.id,
+                GameMessage(
+                    type=MessageType.STATE_UPDATE,
+                    payload={
+                        "party_members_stats": party_members_stats,
+                        **explore_turn,
+                    },
+                ),
+                exclude=connection_id,
+            )
         return GameMessage(
             type=MessageType.SUCCESS,
             payload={
@@ -2335,6 +2452,7 @@ class GameEngine:
                 "mp_gained": mp_gained,
                 "gold_spent": svc["cost"],
                 "player_stats": player.stats.model_dump(),
+                "party_members_stats": party_members_stats,
                 **explore_turn,
             }
         )
@@ -2645,21 +2763,32 @@ def _dungeon_to_dict(dungeon: DungeonState) -> dict:
     }
 
 
-def _combat_to_dict(combat: CombatState) -> dict:
-    """Serialize CombatState to a JSON-safe dict."""
+def _combat_to_dict(combat: CombatState, viewer_player_id: str | None = None) -> dict:
+    """Serialize CombatState to a JSON-safe dict, including viewer-specific combat state."""
     active_player_id = None
     if combat.turn_order:
         active_player_id = combat.turn_order[combat.current_turn_idx % len(combat.turn_order)]
+    player_buffed_turns = 0
+    player_shielded_turns = 0
+    player_stealth = False
+    skill_cooldowns = {}
+    player_status_effects = []
+    if viewer_player_id:
+        player_buffed_turns = combat.player_buff_turns.get(viewer_player_id, 0)
+        player_shielded_turns = combat.player_shield_turns.get(viewer_player_id, 0)
+        player_stealth = combat.player_stealth_flags.get(viewer_player_id, False)
+        skill_cooldowns = dict(combat.skill_cooldowns_by_player.get(viewer_player_id, {}))
+        player_status_effects = list(combat.player_status_by_player.get(viewer_player_id, []))
     return {
         "enemies": [e.model_dump(mode="json") for e in combat.enemies],
         "player_turn": combat.player_turn,
         "turn_number": combat.turn_number,
         "log": combat.log[-20:],
-        "player_buffed_turns": combat.player_buffed_turns,
-        "player_shielded_turns": combat.player_shielded_turns,
-        "player_stealth": combat.player_stealth,
-        "skill_cooldowns": dict(combat.skill_cooldowns),
-        "player_status_effects": list(combat.player_status_effects),
+        "player_buffed_turns": player_buffed_turns,
+        "player_shielded_turns": player_shielded_turns,
+        "player_stealth": player_stealth,
+        "skill_cooldowns": skill_cooldowns,
+        "player_status_effects": player_status_effects,
         "enemy_status_effects": {k: list(v) for k, v in combat.enemy_status_effects.items()},
         "turn_order": list(combat.turn_order),
         "active_player_id": active_player_id,
