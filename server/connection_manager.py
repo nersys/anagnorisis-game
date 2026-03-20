@@ -116,6 +116,11 @@ class ConnectionManager:
         """Associate a connection with a party."""
         if connection_id in self._connections:
             self._connections[connection_id].party_id = party_id
+
+    def clear_party(self, connection_id: str) -> None:
+        """Clear any party association for a connection."""
+        if connection_id in self._connections:
+            self._connections[connection_id].party_id = None
     
     def get_connection(self, connection_id: str) -> Optional[Connection]:
         """Get connection by ID."""

@@ -29,6 +29,7 @@ from shared.models import (
     MessageType,
     Player,
     PlayerClass,
+    PartyMemberSummary,
     PlayerStats,
     Party,
     PartyStatus,
@@ -140,12 +141,21 @@ class GameEngine:
     # Party Helpers
     # ============================================
 
+    def _get_parties_for_player(self, player_id: str) -> list[Party]:
+        """Return every party that currently contains this player."""
+        parties = [party for party in self._parties.values() if player_id in party.member_ids]
+        if len(parties) > 1:
+            logger.warning(
+                "Player %s is in multiple parties: %s",
+                player_id,
+                [party.id for party in parties],
+            )
+        return parties
+
     def _get_party_for_player(self, player_id: str):
         """Return the Party the player belongs to, or None."""
-        return next(
-            (p for p in self._parties.values() if player_id in p.member_ids),
-            None,
-        )
+        parties = self._get_parties_for_player(player_id)
+        return parties[0] if parties else None
 
     def _player_connection_id(self, player_id: str):
         """Return the active connection_id for a player_id, or None."""
@@ -153,6 +163,101 @@ class GameEngine:
             (cid for cid, pid in self._connection_to_player.items() if pid == player_id),
             None,
         )
+
+    def _clear_player_runtime_state(self, player_id: str, remove_player: bool = False) -> None:
+        """Drop ephemeral state tied to an active player session."""
+        self._player_dungeons.pop(player_id, None)
+        self._player_combat.pop(player_id, None)
+        self._player_phase.pop(player_id, None)
+        self._player_attack_buff.pop(player_id, None)
+        self._pending_dice.pop(player_id, None)
+        if remove_player:
+            self._players.pop(player_id, None)
+
+    def _party_to_dict(self, party: Party) -> dict:
+        """Serialize a party with member names/classes for the client UI."""
+        member_details = []
+        for pid in party.member_ids:
+            player = self._players.get(pid)
+            if not player:
+                continue
+            member_details.append(
+                PartyMemberSummary(
+                    id=player.id,
+                    name=player.name,
+                    player_class=player.player_class,
+                )
+            )
+
+        party_copy = party.model_copy(update={"member_details": member_details})
+        return party_copy.model_dump(mode="json")
+
+    async def _remove_player_from_parties(
+        self,
+        player_id: str,
+        manager: ConnectionManager,
+        *,
+        connection_id: Optional[str] = None,
+        disconnecting: bool = False,
+    ) -> list[str]:
+        """Remove a player from every party they belong to and notify the survivors."""
+        player = self._players.get(player_id)
+        player_name = player.name if player else "Unknown Adventurer"
+        affected_party_ids = [party.id for party in self._get_parties_for_player(player_id)]
+
+        if connection_id:
+            manager.clear_party(connection_id)
+
+        for party_id in affected_party_ids:
+            party = self._parties.get(party_id)
+            if not party or player_id not in party.member_ids:
+                continue
+
+            party.member_ids = [pid for pid in party.member_ids if pid != player_id]
+
+            if not party.member_ids:
+                adventure_id = party.current_adventure_id
+                del self._parties[party_id]
+                if adventure_id:
+                    self._adventures.pop(adventure_id, None)
+                    self._narrator_locks.pop(adventure_id, None)
+                logger.info("Party '%s' disbanded after %s left", party.name, player_name)
+                continue
+
+            if party.leader_id == player_id:
+                party.leader_id = party.member_ids[0]
+
+            event_name = "player_disconnected" if disconnecting else "player_left"
+            event_message = (
+                f"{player_name} disconnected from the party."
+                if disconnecting
+                else f"{player_name} left the party."
+            )
+            await manager.broadcast_to_party(
+                party.id,
+                GameMessage(
+                    type=MessageType.GAME_EVENT,
+                    payload={
+                        "event": event_name,
+                        "player_id": player_id,
+                        "player_name": player_name,
+                        "party_size": len(party.member_ids),
+                        "message": event_message,
+                    },
+                ),
+                exclude=connection_id,
+            )
+            await manager.broadcast_to_party(
+                party.id,
+                GameMessage(
+                    type=MessageType.STATE_UPDATE,
+                    payload={"party": self._party_to_dict(party)},
+                ),
+                exclude=connection_id,
+            )
+
+        self._clear_player_runtime_state(player_id, remove_player=disconnecting)
+        return affected_party_ids
 
     async def _broadcast_to_party(self, player_id: str, manager, message) -> None:
         """Send a message to every connected member of the player's party."""
@@ -253,12 +358,17 @@ class GameEngine:
                 payload={"error": f"Unknown message type: {message.type}"}
             )
     
-    async def handle_disconnect(self, connection_id: str) -> None:
+    async def handle_disconnect(self, connection_id: str, manager: ConnectionManager) -> None:
         """Handle a player disconnecting."""
         player_id = self._connection_to_player.pop(connection_id, None)
         if player_id:
             logger.info(f"Player {player_id} disconnected")
-            # TODO: Handle party state, save progress, etc.
+            await self._remove_player_from_parties(
+                player_id,
+                manager,
+                connection_id=connection_id,
+                disconnecting=True,
+            )
     
     # ============================================
     # Connection & Player Management
@@ -379,6 +489,13 @@ class GameEngine:
                 type=MessageType.ERROR,
                 payload={"error": "Player not found"}
             )
+
+        existing_party = self._get_party_for_player(player_id)
+        if existing_party:
+            return GameMessage(
+                type=MessageType.ERROR,
+                payload={"error": f"Leave '{existing_party.name}' before creating a new party"}
+            )
         
         payload = message.payload
         party_name = payload.get("party_name", f"{player.name}'s Party")
@@ -401,7 +518,7 @@ class GameEngine:
             type=MessageType.SUCCESS,
             payload={
                 "message": f"Party '{party.name}' created! Share this ID with friends: {party.id}",
-                "party": party.model_dump(mode="json"),
+                "party": self._party_to_dict(party),
             }
         )
     
@@ -428,11 +545,18 @@ class GameEngine:
         
         player = self._players.get(player_id)
         party_id = message.payload.get("party_id")
-        
+
         if not party_id:
             return GameMessage(
                 type=MessageType.ERROR,
                 payload={"error": "party_id is required"}
+            )
+
+        existing_party = self._get_party_for_player(player_id)
+        if existing_party and existing_party.id != party_id:
+            return GameMessage(
+                type=MessageType.ERROR,
+                payload={"error": f"Leave '{existing_party.name}' before joining another party"}
             )
         
         party = self._parties.get(party_id)
@@ -475,6 +599,14 @@ class GameEngine:
             }
         )
         await manager.broadcast_to_party(party.id, join_notification, exclude=connection_id)
+        await manager.broadcast_to_party(
+            party.id,
+            GameMessage(
+                type=MessageType.STATE_UPDATE,
+                payload={"party": self._party_to_dict(party)},
+            ),
+            exclude=connection_id,
+        )
         
         logger.info(f"Player {player.name} joined party {party.name}")
         
@@ -482,7 +614,7 @@ class GameEngine:
             type=MessageType.SUCCESS,
             payload={
                 "message": f"You joined '{party.name}'!",
-                "party": party.model_dump(mode="json"),
+                "party": self._party_to_dict(party),
                 "members": [self._players[pid].name for pid in party.member_ids],
             }
         )
@@ -500,25 +632,26 @@ class GameEngine:
                 type=MessageType.ERROR,
                 payload={"error": "You must connect first"}
             )
-        
-        # Find player's party
-        for party in self._parties.values():
-            if player_id in party.member_ids:
-                party.member_ids.remove(player_id)
-                
-                # If party is empty, delete it
-                if not party.member_ids:
-                    del self._parties[party.id]
-                    logger.info(f"Party {party.name} disbanded (empty)")
-                # If leader left, assign new leader
-                elif party.leader_id == player_id:
-                    party.leader_id = party.member_ids[0]
-                
-                return GameMessage(
-                    type=MessageType.SUCCESS,
-                    payload={"message": f"You left '{party.name}'"}
-                )
-        
+
+        party = self._get_party_for_player(player_id)
+        if party:
+            await self._remove_player_from_parties(
+                player_id,
+                manager,
+                connection_id=connection_id,
+            )
+            return GameMessage(
+                type=MessageType.SUCCESS,
+                payload={
+                    "message": f"You left '{party.name}'",
+                    "party": None,
+                    "adventure": None,
+                    "dungeon": None,
+                    "combat": None,
+                    "phase": GamePhase.EXPLORING.value,
+                }
+            )
+
         return GameMessage(
             type=MessageType.ERROR,
             payload={"error": "You're not in a party"}
