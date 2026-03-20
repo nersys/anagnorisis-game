@@ -279,6 +279,7 @@ class ItemType(str, Enum):
     WEAPON = "weapon"
     ARMOR = "armor"
     KEY = "key"
+    RESOURCE = "resource"
 
 
 class Item(BaseModel):
