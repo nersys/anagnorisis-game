@@ -82,6 +82,10 @@ class MessageType(str, Enum):
     # DM configuration
     DM_CONFIG = "dm_config"
 
+    # Party
+    PARTY_CHAT = "party_chat"
+    PARTY_UPDATE = "party_update"
+
     # System
     ERROR = "error"
     SUCCESS = "success"

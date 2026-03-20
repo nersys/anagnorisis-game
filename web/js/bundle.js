@@ -165,6 +165,13 @@ function applyStateUpdate(payload) {
   if (payload.inventory !== undefined && state.player) {
     state.player = { ...state.player, inventory: payload.inventory };
   }
+  // Party member live stats (keyed by player id)
+  if (payload.party_members_stats !== undefined) {
+    state.partyMembersStats = {};
+    (payload.party_members_stats || []).forEach(m => {
+      state.partyMembersStats[m.id] = m;
+    });
+  }
 }
 
 // ═══ la-map.js ═══
@@ -1682,6 +1689,12 @@ function initGame() {
   document.getElementById('btn-companion-send').addEventListener('click', sendCompanionMessage);
   companionInput.addEventListener('keydown', e => { if (e.key === 'Enter') sendCompanionMessage(); });
 
+  // ── Party chat ──
+  const partyChatSendBtn = document.getElementById('btn-party-chat-send');
+  const partyChatInput = document.getElementById('party-chat-input');
+  if (partyChatSendBtn) partyChatSendBtn.addEventListener('click', sendPartyChat);
+  if (partyChatInput) partyChatInput.addEventListener('keydown', e => { if (e.key === 'Enter') sendPartyChat(); });
+
   // ── Location history ──
   document.getElementById('btn-location-history').addEventListener('click', showLocationHistory);
   document.getElementById('btn-close-history').addEventListener('click', () => {
@@ -2278,25 +2291,45 @@ function renderEnemies() {
 
 function renderGameParty() {
   const el = document.getElementById('game-party-members');
+  if (!el) return;
   const party = state.party;
   if (!party || !party.member_ids || party.member_ids.length <= 1) {
     el.innerHTML = '<div class="empty-state" style="font-size:10px">Solo adventure</div>';
     return;
   }
-  const p = state.player;
+  const cache = state.partyMembersStats || {};
   el.innerHTML = party.member_ids.map(id => {
     const isSelf = id === state.playerId;
-    const member = isSelf ? p : null;
-    const cls = member ? (CLASSES[member.player_class] || CLASSES.warrior) : { emoji: '👤' };
-    const name = member ? member.name : `Player...`;
-    const hpPct = member ? pctOf(ps(member).health, ps(member).max_health) : 100;
-    return `<div class="game-party-member">
+    // Use cached stats (covers both self and others)
+    const m = cache[id] || (isSelf && state.player ? {
+      id,
+      name: state.player.name,
+      player_class: state.player.player_class,
+      hp: (state.player.stats || {}).health || 0,
+      max_hp: (state.player.stats || {}).max_health || 1,
+      mana: (state.player.stats || {}).mana || 0,
+      max_mana: (state.player.stats || {}).max_mana || 1,
+      level: (state.player.stats || {}).level || 1,
+    } : null);
+    if (!m) return '';
+    const cls = CLASSES[m.player_class] || CLASSES.warrior;
+    const hpPct = pctOf(m.hp, m.max_hp);
+    const mpPct = pctOf(m.mana, m.max_mana);
+    const hpColor = hpPct < 25 ? '#e53935' : hpPct < 50 ? '#fb8c00' : '#4caf50';
+    return `<div class="game-party-member${isSelf ? ' gpm-self' : ''}">
       <div class="gpm-header">
         <span class="gpm-emoji">${cls.emoji}</span>
-        <span class="gpm-name">${name}${isSelf ? ' ★' : ''}</span>
+        <div class="gpm-info">
+          <span class="gpm-name">${m.name}${isSelf ? ' ★' : ''}</span>
+          <span class="gpm-meta">Lv ${m.level} ${m.player_class}</span>
+        </div>
+        <span class="gpm-hp-num" style="color:${hpColor}">${m.hp}/${m.max_hp}</span>
       </div>
-      <div class="bar-track" style="height:4px">
-        <div class="bar-fill bar-hp" style="width:${hpPct}%"></div>
+      <div class="bar-track gpm-bar">
+        <div class="bar-fill bar-hp" style="width:${hpPct}%;background:${hpColor}"></div>
+      </div>
+      <div class="bar-track gpm-bar">
+        <div class="bar-fill bar-mp" style="width:${mpPct}%"></div>
       </div>
     </div>`;
   }).join('');
@@ -2770,6 +2803,19 @@ function updateCompanionPanel() {
   if (tagEl) tagEl.textContent = p.player_class;
 }
 
+function sendPartyChat() {
+  const input = document.getElementById('party-chat-input');
+  if (!input) return;
+  const text = input.value.trim();
+  if (!text) return;
+  ws.send('PARTY_CHAT', { text });
+  input.value = '';
+}
+
+function escHtml(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
 function expandImage(url, caption) {
   const overlay = document.createElement('div');
   overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.92);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;cursor:pointer';
@@ -2989,6 +3035,7 @@ function setupHandlers() {
     if (payload.narrative) {
       typewriterLog(payload.narrative, 'narrative');
     }
+    renderGameParty();
   });
 
   // Combat updates
@@ -3014,6 +3061,7 @@ function setupHandlers() {
       renderActionBar();
       renderEnemies();
       renderCharPortrait();
+      renderGameParty();
       if (laMap && state.dungeon) laMap.render(state.dungeon);
     }
 
@@ -3099,6 +3147,22 @@ function setupHandlers() {
     if (phase === 'exploring') {
       const curRoom = state.dungeon && state.dungeon.rooms && state.dungeon.rooms[state.dungeon.current_room_id];
       if (curRoom) loadContextualActions(curRoom, text);
+    }
+  });
+
+  // Party chat
+  ws.on('PARTY_CHAT', msg => {
+    const { sender_name, sender_class, text, sender_id } = msg.payload || {};
+    if (!text) return;
+    const isSelf = sender_id === state.playerId;
+    const cls = CLASSES[sender_class] || CLASSES.warrior;
+    const chatEl = document.getElementById('party-chat-log');
+    if (chatEl) {
+      const div = document.createElement('div');
+      div.className = `party-chat-entry${isSelf ? ' pce-self' : ''}`;
+      div.innerHTML = `<span class="pce-who">${cls.emoji} ${sender_name}</span><span class="pce-text">${escHtml(text)}</span>`;
+      chatEl.appendChild(div);
+      chatEl.scrollTop = chatEl.scrollHeight;
     }
   });
 
