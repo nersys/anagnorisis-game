@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Cinzel+Decorative:wght@400;700&family=Roboto+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <link rel="stylesheet" href="/static/app.css?v=10" />
+  <link rel="stylesheet" href="/static/app.css?v=11" />
 </head>
 <body>
   <div id="app">
@@ -200,6 +200,14 @@
             <!-- Populated by JS -->
           </div>
 
+          <!-- Party Panel (left side — always visible) -->
+          <div class="panel" id="game-party-panel">
+            <div class="panel-header"><span>👥 Party</span></div>
+            <div id="game-party-members">
+              <!-- Populated by JS -->
+            </div>
+          </div>
+
           <!-- Inventory toggle -->
           <button id="btn-toggle-inventory" class="btn btn-ghost btn-sm full-width">🎒 Inventory & Skills</button>
         </div>
@@ -281,11 +289,15 @@
             </div>
           </div>
 
-          <!-- Party Panel -->
-          <div class="panel" id="game-party-panel">
-            <div class="panel-header"><span>👥 Party</span></div>
-            <div id="game-party-members">
-              <!-- Populated by JS -->
+          <!-- Party Chat Panel -->
+          <div class="panel party-chat-panel" id="party-chat-panel">
+            <div class="panel-header"><span>💬 Party Chat</span></div>
+            <div class="party-chat-log" id="party-chat-log">
+              <div class="empty-state" style="font-size:11px">No messages yet...</div>
+            </div>
+            <div class="party-chat-input-row">
+              <input id="party-chat-input" class="form-input" type="text" placeholder="Say something to your party..." maxlength="200" />
+              <button id="btn-party-chat-send" class="btn btn-accent btn-sm">Send</button>
             </div>
           </div>
 
@@ -488,7 +500,7 @@
   </div><!-- end #app -->
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="/static/js/bundle.js?v=27"></script>
+  <script src="/static/js/bundle.js?v=28"></script>
 
   <!-- Character Portrait — fixed bottom-right overlay -->
   <div id="char-portrait-wrap" class="char-portrait-wrap hidden">

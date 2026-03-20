@@ -199,6 +199,8 @@ class GameEngine:
             MessageType.SKILL_CHOSEN: self._handle_skill_chosen,
             # Equipment
             MessageType.EQUIP_ITEM: self._handle_equip_item,
+            # Party
+            MessageType.PARTY_CHAT: self._handle_party_chat,
         }
         
         handler = handlers.get(message.type)
@@ -481,6 +483,60 @@ class GameEngine:
             payload={"error": "You're not in a party"}
         )
     
+    def _build_party_members_stats(self, party_id: str) -> list:
+        """Return a list of compact stat dicts for all members in a party."""
+        party = self._parties.get(party_id)
+        if not party:
+            return []
+        result = []
+        for pid in party.member_ids:
+            m = self._players.get(pid)
+            if m:
+                result.append({
+                    "id": pid,
+                    "name": m.name,
+                    "player_class": m.player_class.value,
+                    "hp": m.stats.health,
+                    "max_hp": m.stats.max_health,
+                    "mana": m.stats.mana,
+                    "max_mana": m.stats.max_mana,
+                    "level": m.stats.level,
+                })
+        return result
+
+    async def _handle_party_chat(
+        self,
+        connection_id: str,
+        message: GameMessage,
+        manager: ConnectionManager
+    ) -> Optional[GameMessage]:
+        """Broadcast a chat message to all party members."""
+        player_id = self._connection_to_player.get(connection_id)
+        if not player_id:
+            return GameMessage(type=MessageType.ERROR, payload={"error": "Not connected"})
+        player = self._players.get(player_id)
+        if not player:
+            return GameMessage(type=MessageType.ERROR, payload={"error": "Player not found"})
+        text = str(message.payload.get("text", "")).strip()
+        if not text:
+            return None
+        party = self._get_party_for_player(player_id)
+        member_ids = party.member_ids if party else [player_id]
+        chat_msg = GameMessage(
+            type=MessageType.PARTY_CHAT,
+            payload={
+                "sender_id": player_id,
+                "sender_name": player.name,
+                "sender_class": player.player_class.value,
+                "text": text,
+            }
+        )
+        for pid in member_ids:
+            cid = self._player_connection_id(pid)
+            if cid:
+                await manager.send_to(cid, chat_msg)
+        return None
+
     async def _handle_list_parties(
         self,
         connection_id: str,
@@ -1017,6 +1073,7 @@ class GameEngine:
         # Broadcast ROOM_ENTERED to all party members (each gets their own player_stats)
         dungeon_dict = _dungeon_to_dict(dungeon)
         room_dict = target_room.model_dump(mode="json")
+        party_members_stats = self._build_party_members_stats(party.id) if party else []
         for pid in member_ids:
             pmember = self._players.get(pid)
             cid = self._player_connection_id(pid)
@@ -1029,6 +1086,7 @@ class GameEngine:
                         "dungeon": dungeon_dict,
                         "phase": new_phase.value,
                         "player_stats": pmember.stats.model_dump() if pmember else {},
+                        "party_members_stats": party_members_stats,
                     }
                 ))
         # Send NPC encounter as separate message after room entry (to mover only)
@@ -1272,6 +1330,7 @@ class GameEngine:
         combat_dict = _combat_to_dict(combat)
         party = self._get_party_for_player(player_id)
         member_ids = party.member_ids if party else [player_id]
+        party_members_stats = self._build_party_members_stats(party.id) if party else []
         for pid in member_ids:
             pmember = self._players.get(pid)
             cid = self._player_connection_id(pid)
@@ -1283,6 +1342,7 @@ class GameEngine:
                         "phase": GamePhase.COMBAT.value,
                         "player_stats": pmember.stats.model_dump() if pmember else {},
                         "combat": combat_dict,
+                        "party_members_stats": party_members_stats,
                     }
                 ))
         return None
@@ -1700,6 +1760,7 @@ class GameEngine:
 
         # Broadcast victory to all party members (each sees their own stats)
         dungeon_dict = _dungeon_to_dict(dungeon)
+        party_members_stats = self._build_party_members_stats(party.id) if party else []
         for pid in member_ids:
             pmember = self._players.get(pid)
             cid = self._player_connection_id(pid)
@@ -1715,6 +1776,7 @@ class GameEngine:
                         "xp_gained": total_xp,
                         "gold_gained": total_gold,
                         "victory_narrative": victory_narrative,
+                        "party_members_stats": party_members_stats,
                     }
                 ))
 
