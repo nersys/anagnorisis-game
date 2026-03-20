@@ -1775,6 +1775,7 @@ html, body {
 .skill-btn[data-cls="rogue"]   { border-color: rgba(0,96,100,0.5); }
 .skill-btn[data-cls="cleric"]  { border-color: rgba(245,127,23,0.5); }
 .skill-btn[data-cls="ranger"]  { border-color: rgba(51,105,30,0.5); }
+.skill-btn[data-cls="goblin"]  { border-color: rgba(124,179,66,0.5); }
 
 /* ── Scene Utility Toolbar (always visible even when art is off) ── */
 .scene-toolbar {

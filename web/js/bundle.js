@@ -694,6 +694,12 @@ const CLASSES = {
     lore: 'One with nature — your arrows fly true and the wilderness answers your call.',
     stats: { str: 3, int: 3, dex: 4, hp: 3 },
   },
+  goblin: {
+    emoji: '👺', figure: '👺', weapon: '🦴', name: 'Goblin', tag: 'Born to Brawl',
+    color: '#7cb342', colorDim: 'rgba(124,179,66,0.15)', anim: 'warrior-float',
+    lore: 'You are an absolute unit of pure violence. Tiny brain, enormous fists, zero regrets.',
+    stats: { str: 5, int: 1, dex: 2, hp: 5 },
+  },
 };
 
 const SKILLS = {
@@ -740,6 +746,16 @@ const SKILLS = {
   entangle:       { name: 'Entangle',      emoji: '🌿',  mp: 14, desc: 'Roots enemy in vines — stun 2 turns.' },
   eagle_eye:      { name: 'Eagle Eye',     emoji: '🦅',  mp: 12, desc: 'Expose weakness — next shot ignores defense.' },
   camouflage:     { name: 'Camouflage',    emoji: '🌲',  mp: 10, desc: 'Blend in: next attack does 2x nature damage.' },
+  // Goblin
+  headbutt:       { name: 'Headbutt',       emoji: '💢',  mp: 6,  desc: 'Slam your thick skull — stuns target.' },
+  feral_bite:     { name: 'Feral Bite',     emoji: '🦷',  mp: 5,  desc: 'Savage bite — poisons the wound.' },
+  goblin_rage:    { name: 'Goblin Rage',    emoji: '😤',  mp: 8,  desc: 'Frenzy — surge attack power for 3 turns.' },
+  reckless_charge:{ name: 'Reckless Charge',emoji: '🐗',  mp: 10, desc: 'Full-body slam — 2.2x physical damage.' },
+  blood_frenzy:   { name: 'Blood Frenzy',   emoji: '🩸',  mp: 12, desc: 'AOE strike — weakens all enemies.' },
+  bone_crusher:   { name: 'Bone Crusher',   emoji: '🦴',  mp: 10, desc: 'Overhead blow that shatters defense.' },
+  skull_crusher:  { name: 'Skull Crusher',  emoji: '💀',  mp: 14, desc: 'Execute — 2.5x damage on weakened foes.' },
+  goblin_king_shout:{ name: 'King Shout',   emoji: '👑',  mp: 15, desc: 'Terrifying shout — stuns + weakens all.' },
+  rampage:        { name: 'Rampage',        emoji: '🌪️', mp: 14, desc: 'Berserk flurry — 1.6x hits everything.' },
 };
 
 const ITEM_EMOJIS = {
@@ -1849,6 +1865,62 @@ const CHARACTER_SPRITES = {
     <rect x="14" y="143" width="84" height="10" fill="#ffd700"/>
   </svg>`,
 
+  goblin: () => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 112 168" width="112" height="168">
+    <!-- big pointy ears -->
+    <rect x="0"  y="19" width="21" height="7"  fill="#558b2f"/>
+    <rect x="91" y="19" width="21" height="7"  fill="#558b2f"/>
+    <rect x="0"  y="13" width="14" height="7"  fill="#558b2f"/>
+    <rect x="98" y="13" width="14" height="7"  fill="#558b2f"/>
+    <!-- head (wide, squat) -->
+    <rect x="21" y="13" width="70" height="42" fill="#7cb342"/>
+    <!-- bumpy forehead ridges -->
+    <rect x="28" y="13" width="14" height="6"  fill="#8bc34a"/>
+    <rect x="56" y="13" width="14" height="6"  fill="#8bc34a"/>
+    <rect x="70" y="13" width="14" height="6"  fill="#8bc34a"/>
+    <!-- sunken beady eyes (angry) -->
+    <rect x="28" y="26" width="14" height="7"  fill="#1b1b1b"/>
+    <rect x="70" y="26" width="14" height="7"  fill="#1b1b1b"/>
+    <!-- red pupils -->
+    <rect x="32" y="28" width="6"  height="4"  fill="#d32f2f"/>
+    <rect x="74" y="28" width="6"  height="4"  fill="#d32f2f"/>
+    <!-- flat smashed nose -->
+    <rect x="49" y="33" width="14" height="6"  fill="#558b2f"/>
+    <!-- huge grinning mouth with fangs -->
+    <rect x="28" y="40" width="56" height="7"  fill="#1b1b1b"/>
+    <rect x="35" y="40" width="7"  height="4"  fill="#f5f5f5"/>
+    <rect x="63" y="40" width="7"  height="4"  fill="#f5f5f5"/>
+    <rect x="42" y="43" width="28" height="4"  fill="#c62828"/>
+    <!-- neck (thick) -->
+    <rect x="35" y="55" width="42" height="7"  fill="#7cb342"/>
+    <!-- chunky torso (ragged leather) -->
+    <rect x="21" y="62" width="70" height="42" fill="#5d4037"/>
+    <!-- belly bulge hint -->
+    <rect x="28" y="76" width="56" height="14" fill="#6d4c41"/>
+    <!-- torn cloth strips -->
+    <rect x="21" y="90" width="10" height="14" fill="#4e342e"/>
+    <rect x="81" y="90" width="10" height="14" fill="#4e342e"/>
+    <!-- massive right arm -->
+    <rect x="91" y="62" width="21" height="42" fill="#7cb342"/>
+    <!-- massive left arm -->
+    <rect x="0"  y="62" width="21" height="42" fill="#7cb342"/>
+    <!-- spiked club (right hand) -->
+    <rect x="105" y="48" width="7" height="70" fill="#5d4037"/>
+    <rect x="100" y="48" width="14" height="7" fill="#5d4037"/>
+    <!-- spikes on club -->
+    <rect x="98" y="55" width="5"  height="5"  fill="#9e9e9e"/>
+    <rect x="109" y="62" width="5" height="5"  fill="#9e9e9e"/>
+    <rect x="98" y="69" width="5"  height="5"  fill="#9e9e9e"/>
+    <!-- stubby legs -->
+    <rect x="28" y="104" width="21" height="35" fill="#558b2f"/>
+    <rect x="63" y="104" width="21" height="35" fill="#558b2f"/>
+    <!-- crude boots -->
+    <rect x="21" y="132" width="28" height="14" fill="#3e2723"/>
+    <rect x="63" y="132" width="28" height="14" fill="#3e2723"/>
+    <!-- bone/thorn on boots -->
+    <rect x="21" y="132" width="5"  height="5"  fill="#e0e0e0"/>
+    <rect x="86" y="132" width="5"  height="5"  fill="#e0e0e0"/>
+  </svg>`,
+
   ranger: () => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 112 168" width="112" height="168">
     <!-- ranger cap -->
     <rect x="35" y="7" width="42" height="13" fill="#33691e"/>
@@ -2690,7 +2762,7 @@ function updateCompanionPanel() {
   if (!p) return;
   const COMPANION_NAMES = {
     warrior: '🛡 Bryn', mage: '✨ Luma', rogue: '🌑 Shade',
-    cleric: '☀️ Seraph', ranger: '🐺 Fang',
+    cleric: '☀️ Seraph', ranger: '🐺 Fang', goblin: '🐀 Snark',
   };
   const nameEl = document.getElementById('companion-name');
   const tagEl = document.getElementById('companion-class-tag');

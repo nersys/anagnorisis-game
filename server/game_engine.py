@@ -97,8 +97,10 @@ class GameEngine:
         self._current_game_day = 1
 
         # Per-player dungeon state (player_id -> DungeonState)
+        # NOTE: for party play, all party members point to the SAME DungeonState object
         self._player_dungeons: dict[str, DungeonState] = {}
         # Per-player combat state (player_id -> CombatState)
+        # NOTE: for party play, all party members point to the SAME CombatState object
         self._player_combat: dict[str, CombatState] = {}
         # Per-player game phase (player_id -> GamePhase)
         self._player_phase: dict[str, GamePhase] = {}
@@ -135,9 +137,36 @@ class GameEngine:
         logger.info("Game engine shut down.")
     
     # ============================================
+    # Party Helpers
+    # ============================================
+
+    def _get_party_for_player(self, player_id: str):
+        """Return the Party the player belongs to, or None."""
+        return next(
+            (p for p in self._parties.values() if player_id in p.member_ids),
+            None,
+        )
+
+    def _player_connection_id(self, player_id: str):
+        """Return the active connection_id for a player_id, or None."""
+        return next(
+            (cid for cid, pid in self._connection_to_player.items() if pid == player_id),
+            None,
+        )
+
+    async def _broadcast_to_party(self, player_id: str, manager, message) -> None:
+        """Send a message to every connected member of the player's party."""
+        party = self._get_party_for_player(player_id)
+        member_ids = party.member_ids if party else [player_id]
+        for pid in member_ids:
+            cid = self._player_connection_id(pid)
+            if cid:
+                await manager.send_to(cid, message)
+
+    # ============================================
     # Message Handling (Main Entry Point)
     # ============================================
-    
+
     async def handle_message(
         self,
         connection_id: str,
@@ -560,25 +589,27 @@ class GameEngine:
         player_lng = payload.get("lng")
         pois = payload.get("pois", [])
 
-        for pid in party.member_ids:
-            if player_lat is not None and player_lng is not None and pois:
-                rooms = generate_dungeon_from_pois(pois, player_lat, player_lng)
-                logger.info(f"🌍 Real-world dungeon generated ({len(rooms)} rooms) for {pid}")
-            else:
-                rooms = generate_dungeon()
-                logger.info(f"🏰 Classic dungeon generated for {pid}")
+        # Generate ONE shared dungeon for the whole party
+        if player_lat is not None and player_lng is not None and pois:
+            rooms = generate_dungeon_from_pois(pois, player_lat, player_lng)
+            logger.info(f"🌍 Real-world dungeon generated ({len(rooms)} rooms) for party {party.id}")
+        else:
+            rooms = generate_dungeon()
+            logger.info(f"🏰 Classic dungeon generated for party {party.id}")
 
-            dungeon = DungeonState(
-                rooms={rid: r for rid, r in rooms.items()},
-                current_room_id="r0",
-                total_rooms=len(rooms),
-            )
-            self._player_dungeons[pid] = dungeon
+        shared_dungeon = DungeonState(
+            rooms={rid: r for rid, r in rooms.items()},
+            current_room_id="r0",
+            total_rooms=len(rooms),
+        )
+        # Assign the SAME dungeon object to every party member so all share state
+        for pid in party.member_ids:
+            self._player_dungeons[pid] = shared_dungeon
             self._player_phase[pid] = GamePhase.EXPLORING
             self._player_attack_buff[pid] = 0
 
         # Get intro from AI DM if available — pass real-world location context
-        start_room = self._player_dungeons[party.member_ids[0]].rooms["r0"]
+        start_room = shared_dungeon.rooms["r0"]
         intro_narrative = start_room.description
         if self._dm:
             party_members = [self._players[pid] for pid in party.member_ids if pid in self._players]
@@ -915,28 +946,39 @@ class GameEngine:
         living_enemies = [e for e in target_room.enemies if e.hp > 0]
         new_phase = GamePhase.EXPLORING
 
+        party = self._get_party_for_player(player_id)
+        member_ids = party.member_ids if party else [player_id]
+
         if living_enemies:
             new_phase = GamePhase.COMBAT
-            self._player_combat[player_id] = CombatState(
+            shared_combat = CombatState(
                 enemies=living_enemies,
                 player_turn=True,
                 turn_number=1,
                 log=[f"You enter {target_room.name}... enemies appear!"],
             )
-            self._player_phase[player_id] = GamePhase.COMBAT
+            # Share the SAME CombatState and phase with all party members
+            for pid in member_ids:
+                self._player_combat[pid] = shared_combat
+                self._player_phase[pid] = GamePhase.COMBAT
         elif not target_room.cleared:
             target_room.cleared = True
             dungeon.rooms_cleared += 1
-            self._player_phase[player_id] = GamePhase.EXPLORING
+            for pid in member_ids:
+                self._player_phase[pid] = GamePhase.EXPLORING
         else:
-            self._player_phase[player_id] = GamePhase.EXPLORING
+            for pid in member_ids:
+                self._player_phase[pid] = GamePhase.EXPLORING
 
         player = self._players.get(player_id)
 
-        # Mana restore on entering a non-combat room (exploration reward)
-        if new_phase == GamePhase.EXPLORING and player:
-            mp_restore = max(5, int(player.stats.max_mana * 0.10))
-            player.stats.mana = min(player.stats.max_mana, player.stats.mana + mp_restore)
+        # Mana restore on entering a non-combat room (exploration reward, all members)
+        if new_phase == GamePhase.EXPLORING:
+            for pid in member_ids:
+                pmember = self._players.get(pid)
+                if pmember:
+                    mp_restore = max(5, int(pmember.stats.max_mana * 0.10))
+                    pmember.stats.mana = min(pmember.stats.max_mana, pmember.stats.mana + mp_restore)
 
         # NPC encounter: 20% chance when room has a game_role and no combat
         npc_encounter_payload = None
@@ -972,17 +1014,24 @@ class GameEngine:
                                 pass
                         break
 
-        await manager.send_to(connection_id, GameMessage(
-            type=MessageType.ROOM_ENTERED,
-            payload={
-                "room": target_room.model_dump(mode="json"),
-                "narrative": room_narrative,
-                "dungeon": _dungeon_to_dict(dungeon),
-                "phase": new_phase.value,
-                "player_stats": player.stats.model_dump() if player else {},
-            }
-        ))
-        # Send NPC encounter as separate message after room entry
+        # Broadcast ROOM_ENTERED to all party members (each gets their own player_stats)
+        dungeon_dict = _dungeon_to_dict(dungeon)
+        room_dict = target_room.model_dump(mode="json")
+        for pid in member_ids:
+            pmember = self._players.get(pid)
+            cid = self._player_connection_id(pid)
+            if cid:
+                await manager.send_to(cid, GameMessage(
+                    type=MessageType.ROOM_ENTERED,
+                    payload={
+                        "room": room_dict,
+                        "narrative": room_narrative,
+                        "dungeon": dungeon_dict,
+                        "phase": new_phase.value,
+                        "player_stats": pmember.stats.model_dump() if pmember else {},
+                    }
+                ))
+        # Send NPC encounter as separate message after room entry (to mover only)
         if npc_encounter_payload:
             await manager.send_to(connection_id, GameMessage(
                 type=MessageType.NPC_ENCOUNTER,
@@ -1219,15 +1268,23 @@ class GameEngine:
         combat.turn_number += 1
         combat.log.extend(log)
 
-        await manager.send_to(connection_id, GameMessage(
-            type=MessageType.COMBAT_UPDATE,
-            payload={
-                "log": log,
-                "phase": GamePhase.COMBAT.value,
-                "player_stats": player.stats.model_dump(),
-                "combat": _combat_to_dict(combat),
-            }
-        ))
+        # Broadcast combat state to ALL party members (each sees their own player_stats)
+        combat_dict = _combat_to_dict(combat)
+        party = self._get_party_for_player(player_id)
+        member_ids = party.member_ids if party else [player_id]
+        for pid in member_ids:
+            pmember = self._players.get(pid)
+            cid = self._player_connection_id(pid)
+            if cid:
+                await manager.send_to(cid, GameMessage(
+                    type=MessageType.COMBAT_UPDATE,
+                    payload={
+                        "log": log,
+                        "phase": GamePhase.COMBAT.value,
+                        "player_stats": pmember.stats.model_dump() if pmember else {},
+                        "combat": combat_dict,
+                    }
+                ))
         return None
 
     def _calc_player_attack(self, player, combat: CombatState, bonus_mult: float = 1.0,
@@ -1608,8 +1665,18 @@ class GameEngine:
             new_phase = GamePhase.EXPLORING
             log.append("The room is now safe. You may explore further or loot the room.")
 
-        self._player_phase[player_id] = new_phase
-        del self._player_combat[player_id]
+        # Update phase and clear combat for ALL party members
+        party = self._get_party_for_player(player_id)
+        member_ids = party.member_ids if party else [player_id]
+        for pid in member_ids:
+            self._player_phase[pid] = new_phase
+            self._player_combat.pop(pid, None)
+            # Award XP/gold to each party member (split XP evenly)
+            if pid != player_id:
+                pmember = self._players.get(pid)
+                if pmember:
+                    pmember.stats.experience += total_xp
+                    pmember.stats.gold += total_gold
 
         # Generate victory narrative on boss kill
         victory_narrative = None
@@ -1631,19 +1698,25 @@ class GameEngine:
             if next_level <= 5 and player.stats.experience >= XP_PER_LEVEL.get(next_level, 999999):
                 await self._trigger_level_up(player_id, adventure.id, manager, connection_id)
 
-        await manager.send_to(connection_id, GameMessage(
-            type=MessageType.COMBAT_UPDATE,
-            payload={
-                "log": log,
-                "phase": new_phase.value,
-                "player_stats": player.stats.model_dump(),
-                "combat": None,
-                "dungeon": _dungeon_to_dict(dungeon),
-                "xp_gained": total_xp,
-                "gold_gained": total_gold,
-                "victory_narrative": victory_narrative,
-            }
-        ))
+        # Broadcast victory to all party members (each sees their own stats)
+        dungeon_dict = _dungeon_to_dict(dungeon)
+        for pid in member_ids:
+            pmember = self._players.get(pid)
+            cid = self._player_connection_id(pid)
+            if cid:
+                await manager.send_to(cid, GameMessage(
+                    type=MessageType.COMBAT_UPDATE,
+                    payload={
+                        "log": log,
+                        "phase": new_phase.value,
+                        "player_stats": pmember.stats.model_dump() if pmember else {},
+                        "combat": None,
+                        "dungeon": dungeon_dict,
+                        "xp_gained": total_xp,
+                        "gold_gained": total_gold,
+                        "victory_narrative": victory_narrative,
+                    }
+                ))
 
     # ============================================
     # Loot & Items
