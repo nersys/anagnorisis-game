@@ -2293,34 +2293,24 @@ function renderGameParty() {
   const el = document.getElementById('game-party-members');
   if (!el) return;
   const party = state.party;
-  if (!party || !party.member_ids || party.member_ids.length <= 1) {
+  const otherIds = (party && party.member_ids || []).filter(id => id !== state.playerId);
+  if (otherIds.length === 0) {
     el.innerHTML = '<div class="empty-state" style="font-size:10px">Solo adventure</div>';
     return;
   }
   const cache = state.partyMembersStats || {};
-  el.innerHTML = party.member_ids.map(id => {
-    const isSelf = id === state.playerId;
-    // Use cached stats (covers both self and others)
-    const m = cache[id] || (isSelf && state.player ? {
-      id,
-      name: state.player.name,
-      player_class: state.player.player_class,
-      hp: (state.player.stats || {}).health || 0,
-      max_hp: (state.player.stats || {}).max_health || 1,
-      mana: (state.player.stats || {}).mana || 0,
-      max_mana: (state.player.stats || {}).max_mana || 1,
-      level: (state.player.stats || {}).level || 1,
-    } : null);
-    if (!m) return '';
+  el.innerHTML = otherIds.map(id => {
+    const m = cache[id];
+    if (!m) return `<div class="game-party-member"><div class="gpm-header"><span class="gpm-emoji">👤</span><div class="gpm-info"><span class="gpm-name">Adventurer</span><span class="gpm-meta">connecting...</span></div></div></div>`;
     const cls = CLASSES[m.player_class] || CLASSES.warrior;
     const hpPct = pctOf(m.hp, m.max_hp);
     const mpPct = pctOf(m.mana, m.max_mana);
     const hpColor = hpPct < 25 ? '#e53935' : hpPct < 50 ? '#fb8c00' : '#4caf50';
-    return `<div class="game-party-member${isSelf ? ' gpm-self' : ''}">
+    return `<div class="game-party-member">
       <div class="gpm-header">
         <span class="gpm-emoji">${cls.emoji}</span>
         <div class="gpm-info">
-          <span class="gpm-name">${m.name}${isSelf ? ' ★' : ''}</span>
+          <span class="gpm-name">${m.name}</span>
           <span class="gpm-meta">Lv ${m.level} ${m.player_class}</span>
         </div>
         <span class="gpm-hp-num" style="color:${hpColor}">${m.hp}/${m.max_hp}</span>
