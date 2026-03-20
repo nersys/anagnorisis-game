@@ -3797,13 +3797,7 @@ function setupHandlers() {
     const data = payload.data || payload;
 
     if (event === 'adventure_started') {
-      // Non-leader party members: show the cinematic before the game screen appears
-      if (!document.getElementById('adventure-start-cinematic')) {
-        const advName = (payload.adventure && payload.adventure.name) || 'Into the Depths';
-        showAdventureStartCinematic(advName);
-      }
-
-      // Server sends dungeon + player + phase here — transition to game
+      // Show game state immediately — cinematic (if any) plays on top
       if (payload.dungeon) {
         state.dungeon = payload.dungeon;
         state.phase   = payload.phase || 'exploring';
@@ -3812,24 +3806,29 @@ function setupHandlers() {
         if (payload.explore_turn_order)       state.exploreTurnOrder = payload.explore_turn_order;
         if (payload.explore_active_player_id) state.exploreActivePid = payload.explore_active_player_id;
 
-        // Wait for cinematic to play, then show game
-        const transitionDelay = window._dismissAdventureCinematic ? 2200 : 0;
+        // Non-leaders: start cinematic now (leaders already have it from button click)
+        if (!document.getElementById('adventure-start-cinematic')) {
+          const advName = (payload.adventure && payload.adventure.name) || 'Into the Depths';
+          showAdventureStartCinematic(advName);
+        }
+
+        showScreen('game');
+        renderGameUI();
+        const startRoom = payload.dungeon.rooms && payload.dungeon.rooms[payload.dungeon.current_room_id];
+        if (startRoom) {
+          currentRoomData = startRoom;
+          sceneImageSeed = Math.floor(Math.random() * 99999);
+          generateSceneImage(startRoom);
+          document.getElementById('scene-room-name').textContent = startRoom.name || '';
+        }
+        if (payload.narrative) typewriterLog(payload.narrative, 'narrative');
+        addLog(`🗡️ The adventure begins! Use the arrow buttons to explore.`, 'system');
+        startEmbers();
+
+        // Dismiss the cinematic after it's had time to play (~2.5s)
         setTimeout(() => {
           if (window._dismissAdventureCinematic) window._dismissAdventureCinematic();
-          showScreen('game');
-          renderGameUI();
-          // Load the starting room scene image and log
-          const startRoom = payload.dungeon.rooms && payload.dungeon.rooms[payload.dungeon.current_room_id];
-          if (startRoom) {
-            currentRoomData = startRoom;
-            sceneImageSeed = Math.floor(Math.random() * 99999);
-            generateSceneImage(startRoom);
-            document.getElementById('scene-room-name').textContent = startRoom.name || '';
-          }
-          if (payload.narrative) typewriterLog(payload.narrative, 'narrative');
-          addLog(`🗡️ The adventure begins! Use the arrow buttons to explore.`, 'system');
-          startEmbers();
-        }, transitionDelay);
+        }, 2500);
         return;
       }
       if (payload.narrative) typewriterLog(payload.narrative, 'narrative');
