@@ -654,8 +654,8 @@ async def websocket_endpoint(websocket: WebSocket):
         logger.error(f"WebSocket error for {connection_id}: {e}")
     finally:
         # Clean up the connection
+        await app.state.game_engine.handle_disconnect(connection_id, manager)
         await manager.disconnect(connection_id)
-        await app.state.game_engine.handle_disconnect(connection_id)
 
 
 # ============================================

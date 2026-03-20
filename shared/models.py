@@ -168,12 +168,20 @@ class PartyStatus(str, Enum):
     COMPLETED = "completed"   # Adventure finished
 
 
+class PartyMemberSummary(BaseModel):
+    """A lightweight party roster entry for UI rendering."""
+    id: str
+    name: str
+    player_class: PlayerClass
+
+
 class Party(BaseModel):
     """A group of players adventuring together."""
     id: str = Field(default_factory=generate_id)
     name: str
     leader_id: str
     member_ids: list[str] = Field(default_factory=list)
+    member_details: list[PartyMemberSummary] = Field(default_factory=list)
     max_members: int = 4
     status: PartyStatus = PartyStatus.LOBBY
     current_adventure_id: Optional[str] = None

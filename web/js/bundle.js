@@ -1267,12 +1267,13 @@ function renderCurrentParty() {
 
   const membersEl = document.getElementById('party-members-list');
   const members = party.member_ids || [];
+  const roster = Object.fromEntries((party.member_details || []).map(member => [member.id, member]));
   membersEl.innerHTML = members.map(id => {
     const isLeader = id === party.leader_id;
     const isSelf   = id === state.playerId;
-    const p        = isSelf ? state.player : null;
-    const cls      = p ? (CLASSES[p.player_class] || CLASSES.warrior) : { emoji: '👤' };
-    const name     = p ? p.name : `Player ${id.slice(0,6)}`;
+    const member   = isSelf ? state.player : (roster[id] || null);
+    const cls      = member ? (CLASSES[member.player_class] || CLASSES.warrior) : { emoji: '👤' };
+    const name     = member ? member.name : `Player ${id.slice(0,6)}`;
     return `<div class="party-member">
       <span class="member-emoji">${cls.emoji}</span>
       <span class="member-name">${name}${isSelf ? ' (you)' : ''}</span>
@@ -3202,6 +3203,9 @@ function setupHandlers() {
   // State updates
   ws.on('STATE_UPDATE', msg => {
     applyStateUpdate(msg.payload || {});
+    if (state.screen === 'lobby') {
+      renderCurrentParty();
+    }
     if (state.screen === 'game') {
       renderStats();
       renderPhaseBanner();
