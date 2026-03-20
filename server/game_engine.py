@@ -164,6 +164,47 @@ class GameEngine:
                 await manager.send_to(cid, message)
 
     # ============================================
+    # Explore Turn Helpers
+    # ============================================
+
+    def _explore_active_player(self, party) -> str | None:
+        """Return the player_id whose explore turn it is, or None for solo."""
+        if not party or len(party.explore_turn_order) <= 1:
+            return None  # solo — always their turn
+        if not party.explore_turn_order:
+            return None
+        idx = party.explore_turn_idx % len(party.explore_turn_order)
+        return party.explore_turn_order[idx]
+
+    def _check_explore_turn(self, player_id: str, party) -> GameMessage | None:
+        """Return an error GameMessage if it's not this player's explore turn, else None."""
+        active = self._explore_active_player(party)
+        if active is None or active == player_id:
+            return None
+        actor = self._players.get(active)
+        name = actor.name if actor else "another adventurer"
+        return GameMessage(
+            type=MessageType.ERROR,
+            payload={"error": f"It's {name}'s turn — wait for them to act!"}
+        )
+
+    def _advance_explore_turn(self, party) -> None:
+        """Move to the next player's explore turn, skipping dead/disconnected players."""
+        if not party or len(party.explore_turn_order) <= 1:
+            return
+        party.explore_turn_idx = (party.explore_turn_idx + 1) % len(party.explore_turn_order)
+
+    def _explore_turn_payload(self, party) -> dict:
+        """Return the explore-turn fields to include in every broadcast payload."""
+        if not party or not party.explore_turn_order:
+            return {}
+        active = self._explore_active_player(party)
+        return {
+            "explore_turn_order": list(party.explore_turn_order),
+            "explore_active_player_id": active,
+        }
+
+    # ============================================
     # Message Handling (Main Entry Point)
     # ============================================
 
@@ -636,6 +677,11 @@ class GameEngine:
         self._adventures[adventure.id] = adventure
         party.status = PartyStatus.IN_ADVENTURE
         party.current_adventure_id = adventure.id
+        # Randomise exploration turn order for this adventure
+        shuffled = list(party.member_ids)
+        random.shuffle(shuffled)
+        party.explore_turn_order = shuffled
+        party.explore_turn_idx = 0
 
         logger.info(f"Adventure '{adventure.name}' started for party {party.name}")
 
@@ -678,6 +724,7 @@ class GameEngine:
             )
 
         # Notify all party members with their dungeon state
+        explore_turn = self._explore_turn_payload(party)
         for pid in party.member_ids:
             conn = manager.get_connection_by_player(pid)
             if conn:
@@ -690,6 +737,7 @@ class GameEngine:
                         "narrative": intro_narrative,
                         "dungeon": _dungeon_to_dict(dungeon),
                         "phase": GamePhase.EXPLORING.value,
+                        **explore_turn,
                     }
                 ))
 
@@ -736,7 +784,12 @@ class GameEngine:
                 type=MessageType.ERROR,
                 payload={"error": "You're not on an adventure"}
             )
-        
+
+        # Explore turn check
+        turn_err = self._check_explore_turn(player_id, party)
+        if turn_err:
+            return turn_err
+
         adventure = self._adventures.get(party.current_adventure_id)
         if not adventure:
             return GameMessage(
@@ -784,6 +837,10 @@ class GameEngine:
         else:
             roll_req = None
 
+        # Advance explore turn — the dice result (if any) is same turn's resolution, not a new turn
+        self._advance_explore_turn(party)
+        explore_turn = self._explore_turn_payload(party)
+
         if roll_req:
             setup = self._dm.strip_dice_tag(response)
             # Store pending roll so we can resolve it when the client sends the result
@@ -799,7 +856,8 @@ class GameEngine:
             # Send setup narrative + roll request to client
             await manager.broadcast_to_party(party.id, GameMessage(
                 type=MessageType.DM_RESPONSE,
-                payload={"player_name": player.name, "action": action_text, "narrative": setup},
+                payload={"player_name": player.name, "action": action_text, "narrative": setup,
+                         **explore_turn},
             ))
             await manager.send_to(connection_id, GameMessage(
                 type=MessageType.DICE_ROLL_REQUIRED,
@@ -819,6 +877,7 @@ class GameEngine:
                     "narrative": response,
                     "game_day": self._current_game_day,
                     "game_hour": self._current_game_hour,
+                    **explore_turn,
                 },
             ))
 
@@ -965,6 +1024,12 @@ class GameEngine:
         if not dungeon:
             return GameMessage(type=MessageType.ERROR, payload={"error": "No active dungeon"})
 
+        # Explore turn check
+        party = self._get_party_for_player(player_id)
+        turn_err = self._check_explore_turn(player_id, party)
+        if turn_err:
+            return turn_err
+
         direction = message.payload.get("direction", "").lower()
         if direction not in ("north", "south", "east", "west", "forward", "back"):
             return GameMessage(type=MessageType.ERROR, payload={"error": f"Invalid direction: {direction}"})
@@ -1075,10 +1140,15 @@ class GameEngine:
                                 pass
                         break
 
+        # Advance explore turn after a successful move (entering combat resets to that fight's order)
+        if new_phase == GamePhase.EXPLORING:
+            self._advance_explore_turn(party)
+
         # Broadcast ROOM_ENTERED to all party members (each gets their own player_stats)
         dungeon_dict = _dungeon_to_dict(dungeon)
         room_dict = target_room.model_dump(mode="json")
         party_members_stats = self._build_party_members_stats(party.id) if party else []
+        explore_turn = self._explore_turn_payload(party)
         for pid in member_ids:
             pmember = self._players.get(pid)
             cid = self._player_connection_id(pid)
@@ -1092,6 +1162,7 @@ class GameEngine:
                         "phase": new_phase.value,
                         "player_stats": pmember.stats.model_dump() if pmember else {},
                         "party_members_stats": party_members_stats,
+                        **explore_turn,
                     }
                 ))
         # Send NPC encounter as separate message after room entry (to mover only)
@@ -1933,6 +2004,11 @@ class GameEngine:
         if phase == GamePhase.COMBAT:
             return GameMessage(type=MessageType.ERROR, payload={"error": "Cannot loot during combat!"})
 
+        party = self._get_party_for_player(player_id)
+        turn_err = self._check_explore_turn(player_id, party)
+        if turn_err:
+            return turn_err
+
         room = dungeon.rooms.get(dungeon.current_room_id)
         if not room:
             return GameMessage(type=MessageType.ERROR, payload={"error": "Room not found"})
@@ -1962,6 +2038,8 @@ class GameEngine:
                 parts.append(f"{gold} gold")
             msg = "You loot: " + " and ".join(parts) + "!"
 
+        self._advance_explore_turn(party)
+        explore_turn = self._explore_turn_payload(party)
         return GameMessage(
             type=MessageType.SUCCESS,
             payload={
@@ -1971,6 +2049,7 @@ class GameEngine:
                 "player_stats": player.stats.model_dump(),
                 "inventory": player.inventory,
                 "dungeon": _dungeon_to_dict(dungeon),
+                **explore_turn,
             }
         )
 
@@ -2041,6 +2120,11 @@ class GameEngine:
         if not player:
             return GameMessage(type=MessageType.ERROR, payload={"error": "Player not found"})
 
+        party = self._get_party_for_player(player_id)
+        turn_err = self._check_explore_turn(player_id, party)
+        if turn_err:
+            return turn_err
+
         # Tavern services: cost, hp_restore, mp_restore, description
         SERVICES = {
             "ale":     {"cost": 10, "hp": 20,  "mp": 5,   "label": "Ale & Bread",      "emoji": "🍺"},
@@ -2071,6 +2155,8 @@ class GameEngine:
             f"Remaining gold: {player.stats.gold}g."
         )
 
+        self._advance_explore_turn(party)
+        explore_turn = self._explore_turn_payload(party)
         return GameMessage(
             type=MessageType.SUCCESS,
             payload={
@@ -2081,6 +2167,7 @@ class GameEngine:
                 "mp_gained": mp_gained,
                 "gold_spent": svc["cost"],
                 "player_stats": player.stats.model_dump(),
+                **explore_turn,
             }
         )
 

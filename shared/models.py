@@ -178,6 +178,9 @@ class Party(BaseModel):
     status: PartyStatus = PartyStatus.LOBBY
     current_adventure_id: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
+    # Exploration turn order (all phases outside combat)
+    explore_turn_order: list[str] = Field(default_factory=list)
+    explore_turn_idx: int = 0
 
 
 # ============================================
