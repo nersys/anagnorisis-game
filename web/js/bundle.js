@@ -157,6 +157,8 @@ function applyStateUpdate(payload) {
   if (payload.dungeon !== undefined) state.dungeon = payload.dungeon;
   if (payload.combat  !== undefined) state.combat  = payload.combat;
   if (payload.phase   !== undefined) state.phase   = payload.phase;
+  if (payload.explore_turn_order      !== undefined) state.exploreTurnOrder    = payload.explore_turn_order;
+  if (payload.explore_active_player_id !== undefined) state.exploreActivePid  = payload.explore_active_player_id;
   // Server often sends player_stats instead of full player object
   if (payload.player_stats !== undefined && state.player) {
     state.player = { ...state.player, stats: payload.player_stats };
@@ -1451,11 +1453,17 @@ function showAdventureStartCinematic(adventureName) {
   // Expose dismiss function — called by ROOM_ENTERED handler
   window._dismissAdventureCinematic = function() {
     clearInterval(flTimer);
+    clearTimeout(ascFallbackTimer);
     if (overlay._stopCanvas) overlay._stopCanvas();
     overlay.classList.add('asc-done');
     setTimeout(() => { if (overlay.parentNode) overlay.parentNode.removeChild(overlay); }, 700);
     delete window._dismissAdventureCinematic;
   };
+
+  // Safety fallback: dismiss after 15s no matter what (prevents getting stuck)
+  const ascFallbackTimer = setTimeout(() => {
+    if (window._dismissAdventureCinematic) window._dismissAdventureCinematic();
+  }, 15000);
 }
 
 function lobbyToast(msg) {
@@ -2208,7 +2216,6 @@ function renderPhaseBanner() {
       tLabel = '⚔️ YOUR TURN';
       tCls = 'player-turn';
     } else {
-      // Find active player name from partyMembersStats
       const cache = state.partyMembersStats || {};
       const activeMember = cache[activePid];
       const activeName = activeMember ? activeMember.name : 'Ally';
@@ -2227,6 +2234,30 @@ function renderPhaseBanner() {
       orderHtml = `<span class="turn-order-row">${orderHtml}</span>`;
     }
     turnIndicatorHtml = `<span class="turn-indicator ${tCls}">${tLabel}</span>${orderHtml}`;
+  } else if (phase !== 'combat') {
+    // Explore / loot / victory phases — show explore turn order
+    const activePid = state.exploreActivePid;
+    const turnOrder = state.exploreTurnOrder || [];
+    if (activePid && turnOrder.length > 1) {
+      const isMyTurn = activePid === state.playerId;
+      const cache = state.partyMembersStats || {};
+      let tLabel, tCls;
+      if (isMyTurn) {
+        tLabel = '🧭 YOUR TURN';
+        tCls = 'player-turn';
+      } else {
+        const m = cache[activePid];
+        tLabel = `⏳ ${m ? m.name : 'Ally'}'s turn`;
+        tCls = 'ally-turn';
+      }
+      const orderHtml = turnOrder.map(pid => {
+        const isActive = pid === activePid;
+        const m = cache[pid];
+        const nm = m ? m.name : (pid === state.playerId ? (state.player && state.player.name) || 'You' : '?');
+        return `<span class="turn-order-pip${isActive ? ' active' : ''}">${nm}</span>`;
+      }).join('<span class="turn-order-sep">→</span>');
+      turnIndicatorHtml = `<span class="turn-indicator ${tCls}">${tLabel}</span><span class="turn-order-row">${orderHtml}</span>`;
+    }
   }
   document.getElementById('phase-text').innerHTML = `<span class="phase-label">${phaseLabel}</span>${turnIndicatorHtml}`;
   document.getElementById('game-time').textContent = `Day ${state.gameDay} · ${String(state.gameHour).padStart(2,'0')}:00`;
@@ -2337,7 +2368,33 @@ function renderActionBar() {
     return;
   }
 
+  // Helper: render waiting overlay for explore turns
+  function exploreWaitingHtml() {
+    const activePid = state.exploreActivePid;
+    const cache = state.partyMembersStats || {};
+    const m = cache[activePid];
+    const activeName = m ? m.name : 'your ally';
+    return `
+      <div class="waiting-turn-panel">
+        <div class="waiting-turn-pulse"></div>
+        <div class="waiting-turn-text">
+          <span class="waiting-turn-icon">🧭</span>
+          <span class="waiting-turn-name">${activeName}</span>
+          <span class="waiting-turn-label"> is leading the way…</span>
+        </div>
+      </div>
+    `;
+  }
+
+  // Check explore turn gating for non-combat phases
+  const exploreActivePid = state.exploreActivePid;
+  const isMyExploreTurn = !exploreActivePid || exploreActivePid === state.playerId;
+
   if (phase === 'looting') {
+    if (!isMyExploreTurn) {
+      bar.innerHTML = exploreWaitingHtml();
+      return;
+    }
     bar.innerHTML = `
       <button class="btn btn-accent btn-large" id="btn-loot">💰 LOOT THE ROOM</button>
       <span style="color:var(--text-muted);font-size:11px">or continue exploring</span>
@@ -2351,6 +2408,11 @@ function renderActionBar() {
   }
 
   // Exploring (default) — direction buttons + contextual actions
+  if (!isMyExploreTurn) {
+    bar.innerHTML = exploreWaitingHtml();
+    return;
+  }
+
   bar.innerHTML = `
     <div class="action-group" id="dir-group"></div>
     <div class="action-divider"></div>
@@ -3493,23 +3555,40 @@ function setupHandlers() {
     const data = payload.data || payload;
 
     if (event === 'adventure_started') {
+      // Non-leader party members: show the cinematic before the game screen appears
+      if (!document.getElementById('adventure-start-cinematic')) {
+        const advName = (payload.adventure && payload.adventure.name) || 'Into the Depths';
+        showAdventureStartCinematic(advName);
+      }
+
       // Server sends dungeon + player + phase here — transition to game
       if (payload.dungeon) {
         state.dungeon = payload.dungeon;
         state.phase   = payload.phase || 'exploring';
         if (payload.player) state.player = payload.player;
         if (payload.party)  state.party  = payload.party;
-        showScreen('game');
-        renderGameUI();
+        if (payload.explore_turn_order)       state.exploreTurnOrder = payload.explore_turn_order;
+        if (payload.explore_active_player_id) state.exploreActivePid = payload.explore_active_player_id;
 
-        // Load the starting room scene image and log
-        const startRoom = payload.dungeon.rooms && payload.dungeon.rooms[payload.dungeon.current_room_id];
-        if (startRoom) {
-          currentRoomData = startRoom;
-          sceneImageSeed = Math.floor(Math.random() * 99999);
-          generateSceneImage(startRoom);
-          document.getElementById('scene-room-name').textContent = startRoom.name || '';
-        }
+        // Wait for cinematic to play, then show game
+        const transitionDelay = window._dismissAdventureCinematic ? 2200 : 0;
+        setTimeout(() => {
+          if (window._dismissAdventureCinematic) window._dismissAdventureCinematic();
+          showScreen('game');
+          renderGameUI();
+          // Load the starting room scene image and log
+          const startRoom = payload.dungeon.rooms && payload.dungeon.rooms[payload.dungeon.current_room_id];
+          if (startRoom) {
+            currentRoomData = startRoom;
+            sceneImageSeed = Math.floor(Math.random() * 99999);
+            generateSceneImage(startRoom);
+            document.getElementById('scene-room-name').textContent = startRoom.name || '';
+          }
+          if (payload.narrative) typewriterLog(payload.narrative, 'narrative');
+          addLog(`🗡️ The adventure begins! Use the arrow buttons to explore.`, 'system');
+          startEmbers();
+        }, transitionDelay);
+        return;
       }
       if (payload.narrative) typewriterLog(payload.narrative, 'narrative');
       addLog(`🗡️ The adventure begins! Use the arrow buttons to explore.`, 'system');
