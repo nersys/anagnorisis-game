@@ -35,3 +35,8 @@ Original prompt: give me a github summary and then switch to working on this
   - cap IP geolocation wait to 2.5s and POI prefetch to 4s, then fall back to classic dungeon instead of stalling start
   - immediately clear pending state and dismiss the cinematic if the websocket send fails or the server returns `ERROR`
 - Updated `web/index.html` bundle cache version to `v=35`.
+
+- Follow-up runtime error after start attempt: `type object 'ItemType' has no attribute 'RESOURCE'`.
+- Root cause: server dungeon generation and loot code already use `ItemType.RESOURCE`, but the enum in `shared/models.py` did not define that member.
+- Fix: added `RESOURCE = "resource"` to `ItemType`.
+- Validation: `PYTHONPYCACHEPREFIX=/tmp/pycache python3 -m py_compile shared/models.py server/dungeon_generator.py server/game_engine.py` passed.
